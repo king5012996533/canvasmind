@@ -319,6 +319,7 @@ const handleSubmit = () => {
     const sizeConfig = toolbar.getCurrentSizeConfig()
     emit('send', message, currentType.value, {
       model: toolbar.getCurrentModelLabel(),
+      modelKey: toolbar.currentModelVersion,
       ratio: toolbar.currentSize,
       resolution: sizeConfig.quality,
       duration: toolbar.currentDuration,
@@ -486,14 +487,30 @@ const readCurrentModelPointCost = () => {
   return Math.max(0, Number(model?.defaultParams?.billingRule?.power || 0))
 }
 
+const readCurrentModelBillingRule = () => {
+  const currentModelKey = currentType.value === 'image'
+    ? imageToolbarRef.value?.currentModelVersion
+    : currentType.value === 'video'
+      ? videoToolbarRef.value?.currentModelVersion
+      : ''
+
+  if (!currentModelKey) return null
+
+  const model = getModelByName(currentModelKey) as { defaultParams?: Record<string, any> } | null
+  return (model?.defaultParams?.billingRule || null) as Record<string, any> | null
+}
+
 const priceText = computed(() => {
   const pointCost = readCurrentModelPointCost()
+  const billingRule = readCurrentModelBillingRule()
 
   switch (currentType.value) {
     case 'image':
-      return `${pointCost || 0} / 张`
+      return `${pointCost || 0} 积分/张`
     case 'video':
-      return String(pointCost || 0)
+      return `${pointCost || 0} 积分/秒`
+    case 'agent':
+      return `${pointCost || 0} 积分/${Number(billingRule?.tokens || 1000) || 1000} Tokens`
     default:
       return ''
   }

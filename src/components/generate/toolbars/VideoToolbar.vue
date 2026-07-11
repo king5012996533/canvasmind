@@ -47,7 +47,8 @@ const sizeOptions = [
 // 时长配置
 const durationOptions = [
   { value: '5s', label: '5s' },
-  { value: '10s', label: '10s' }
+  { value: '10s', label: '10s' },
+  { value: '15s', label: '15s' },
 ]
 
 const readStoredVideoToolbarState = () => {

@@ -74,15 +74,16 @@ interface TaskLifecycleContext {
   resolveGenerationPointCost: (input: {
     providerId: string
     modelKey: string
-    endpointType: 'chat' | 'image'
+    endpointType: 'chat' | 'image' | 'video'
     capabilityFlags?: ModelCapabilityFlags | null
+    requestParams?: import('../marketing-center/service').VideoBillingParams
   }) => Promise<BillingDetail>
   consumeGenerationPoints: (input: {
     userId: string
     pointCost: number
     sourceId: string
     associationNo: string
-    endpointType: 'chat' | 'image'
+    endpointType: 'chat' | 'image' | 'video'
     providerId: string
     modelKey: string
     modelName: string
@@ -396,10 +397,21 @@ export const startGenerationTask = async (
       skillKey,
     })
 
+    // 根据策略键推导计费类型，避免视频任务被当图片扣费
+    const genericEndpointType: 'image' | 'video' = strategy.key === 'video' ? 'video' : 'image'
+    const genericBillingParams = genericEndpointType === 'video'
+      ? {
+          resolution: String((payload as Record<string, unknown>).resolution || '720P').trim() || undefined,
+          duration: Number((payload as Record<string, unknown>).duration || 0) || undefined,
+          imageUrl: Array.isArray(payload.referenceImages) && payload.referenceImages.length > 0 ? 'set' : undefined,
+        }
+      : undefined
+
     const billingDetail = await context.resolveGenerationPointCost({
       providerId,
       modelKey,
-      endpointType: 'image',
+      endpointType: genericEndpointType,
+      requestParams: genericBillingParams,
     })
     const associationNo = context.buildGatewayAssociationNo()
     const pointLog = billingDetail.pointCost > 0
@@ -408,7 +420,7 @@ export const startGenerationTask = async (
         pointCost: billingDetail.pointCost,
         sourceId: associationNo,
         associationNo,
-        endpointType: 'image',
+        endpointType: genericEndpointType,
         providerId,
         modelKey,
         modelName: billingDetail.modelName,

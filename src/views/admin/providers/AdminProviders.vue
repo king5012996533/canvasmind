@@ -260,6 +260,9 @@
           <button class="admin-button admin-button--secondary" type="button" @click="openDiscoverModelsDialog" :disabled="!selectedProvider || modelLoading || modelSaving || discoveringModels">
             {{ discoveringModels ? '获取中...' : '拉取模型' }}
           </button>
+          <button class="admin-button admin-button--secondary" type="button" @click="handleImportSeedancePresets" :disabled="!selectedProvider || modelLoading || modelSaving">
+            导入 Seedance 预设
+          </button>
           <button class="admin-button admin-button--primary" type="button" @click="openCreateModelDialog" :disabled="!selectedProvider">添加模型</button>
           <button class="admin-dialog__close" type="button" @click="closeModelManager">×</button>
         </div>
@@ -293,7 +296,7 @@
                 <span v-if="readCapabilityFlag(model.capabilityJson, 'supportsToolCall')" class="admin-chip">工具</span>
                 <span v-if="readCapabilityFlag(model.capabilityJson, 'supportsReasoning')" class="admin-chip">推理</span>
                 <span v-if="readCapabilityFlag(model.capabilityJson, 'supportsStructuredOutput')" class="admin-chip">结构化</span>
-                <span v-if="readModelPrice(model) === 0" class="admin-chip">免费</span>
+                <span class="admin-chip">{{ formatModelPrice(model) }}</span>
               </div>
             </div>
             <div class="admin-model-row__right">
@@ -424,8 +427,14 @@
 
           <div class="admin-form__field admin-form__field--full">
             <label class="admin-form__label" for="model-key">模型标识符</label>
-            <input id="model-key" v-model.trim="modelForm.modelKey" class="admin-input" type="text" placeholder="例如: gpt-4o, deepseek-chat">
-            <div class="admin-form__hint">API 调用时使用的模型标识</div>
+            <select v-model="selectedModelPresetKey" class="admin-input" @change="handleModelPresetChange">
+              <option value="">手动输入模型标识</option>
+              <option v-for="preset in modelVariantPresetOptions" :key="preset.modelKey" :value="preset.modelKey">
+                {{ preset.label }}（{{ preset.modelKey }}）
+              </option>
+            </select>
+            <input id="model-key" v-model.trim="modelForm.modelKey" class="admin-input" type="text" placeholder="例如: gpt-4o, deepseek-chat" @input="selectedModelPresetKey = ''">
+            <div class="admin-form__hint">可从常用型号中选择，也可以手动输入上游 API 调用时使用的模型标识。</div>
           </div>
 
           <div class="admin-form__field">
@@ -442,10 +451,46 @@
 
           <div class="admin-form__field">
             <label class="admin-form__label" for="model-billing-power">计费规则</label>
-            <div class="admin-composite-input">
-              <input id="model-billing-power" v-model.number="modelForm.billingPower" class="admin-input" type="number" min="0" placeholder="请输入模型计费">
-              <span class="admin-composite-input__suffix">积分 / {{ modelForm.billingTokens || 1000 }} Tokens</span>
+
+            <!-- 视频模型：可选择按秒计费 -->
+            <div v-if="isVideoModelCategory" class="admin-check-item admin-check-item--switch" style="margin-bottom: 8px;">
+              <input id="model-billing-type" v-model="modelForm.billingType" type="checkbox" true-value="per_second" false-value="flat">
+              <span>按秒计费（不同分辨率不同单价）</span>
             </div>
+
+            <!-- per_second 模式：定价矩阵 -->
+            <div v-if="isVideoModelCategory && modelForm.billingType === 'per_second'">
+              <table class="admin-table" style="width: 100%; font-size: 12px;">
+                <thead>
+                  <tr>
+                    <th>分辨率</th>
+                    <th>文生视频（积分/秒）</th>
+                    <th>图生视频（积分/秒）</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="res in ['480P', '720P', '1080P', '4K']" :key="res">
+                    <td>{{ res }}</td>
+                    <td>
+                      <input :value="modelForm.pricingMatrix[res]?.text_to_video ?? 0" class="admin-input" type="number" min="0" step="0.01" placeholder="0"
+                        @input="setPricingMatrixValue(res, 'text_to_video', $event)">
+                    </td>
+                    <td>
+                      <input :value="modelForm.pricingMatrix[res]?.uploaded_video ?? 0" class="admin-input" type="number" min="0" step="0.01" placeholder="0"
+                        @input="setPricingMatrixValue(res, 'uploaded_video', $event)">
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+              <div class="admin-form__hint">按秒计费 = 单价 × (参考时长 + 生成时长)。留空或 0 表示不支持该分辨率。</div>
+            </div>
+
+            <!-- flat 模式：单一积分输入 -->
+            <div v-else class="admin-composite-input">
+              <input id="model-billing-power" v-model.number="modelForm.billingPower" class="admin-input" type="number" min="0" placeholder="请输入模型计费">
+              <span class="admin-composite-input__suffix">{{ billingRuleSuffix }}</span>
+            </div>
+            <div v-if="!(isVideoModelCategory && modelForm.billingType === 'per_second')" class="admin-form__hint">{{ billingRuleHint }}</div>
           </div>
 
           <div class="admin-form__field">
@@ -628,6 +673,7 @@ const modelKeyword = ref('')
 const modelStatus = ref<'ALL' | 'ENABLED' | 'DISABLED'>('ALL')
 const modelCategoryFilter = ref<'ALL' | AdminModelCategory>('ALL')
 const models = ref<AdminProviderModelItem[]>([])
+const selectedModelPresetKey = ref('')
 const discoveredModels = ref<DiscoveredProviderModelItem[]>([])
 const discoveredRequestUrl = ref('')
 const selectedDiscoveredModelKeys = ref<string[]>([])
@@ -672,6 +718,9 @@ const modelForm = reactive({
   defaultParamsJsonText: '',
   billingPower: 0,
   billingTokens: 1000,
+  // 视频按秒计费：billingType='per_second' 时使用 pricingMatrix 替代单一 power
+  billingType: 'flat' as 'flat' | 'per_second',
+  pricingMatrix: {} as Record<string, { text_to_video: number; uploaded_video: number }>,
   membershipLevelsText: '',
   maxContext: 3,
   isDefault: false,
@@ -680,12 +729,150 @@ const modelForm = reactive({
   maxImagesPerRequest: 1,
 })
 
+const isImageModelCategory = computed(() => modelForm.category === 'IMAGE')
+const isVideoModelCategory = computed(() => modelForm.category === 'VIDEO')
+const billingRuleSuffix = computed(() => {
+  if (isVideoModelCategory.value) return '积分 / 秒'
+  if (isImageModelCategory.value) return '积分 / 张'
+  return `积分 / ${modelForm.billingTokens || 1000} Tokens`
+})
+const billingRuleHint = computed(() => {
+  if (isVideoModelCategory.value) {
+    return '视频模型这里填写每秒消耗积分，例如 85 代表每生成 1 秒扣 85 积分。'
+  }
+  if (isImageModelCategory.value) {
+    return '图片模型这里填写每张消耗积分，批量出图会按张数累计扣点。'
+  }
+  return '对话模型这里填写每 1000 Tokens 消耗积分。'
+})
+
+// 确保 pricingMatrix 的某个分辨率行存在并设置值，避免 v-model 可选链报错
+const setPricingMatrixValue = (res: string, field: 'text_to_video' | 'uploaded_video', event: Event) => {
+  if (!modelForm.pricingMatrix[res]) {
+    modelForm.pricingMatrix[res] = { text_to_video: 0, uploaded_video: 0 }
+  }
+  const target = event.target as HTMLInputElement
+  modelForm.pricingMatrix[res][field] = Number(target.value) || 0
+}
+
 const discoverBatchSettings = reactive({
   category: 'CHAT' as AdminModelCategory,
   isEnabled: true,
   sortOrderStart: 0,
   sortOrderStep: 10,
 })
+
+const seedancePresetModels: AdminProviderModelPayload[] = [
+  {
+    category: 'VIDEO',
+    label: 'Seedance 2.0 标准版',
+    modelKey: 'doubao-seedance-2.0',
+    description: 'Seedance 2.0 标准版，支持 480P/720P/1080P/4K。',
+    sortOrder: 100,
+    isEnabled: true,
+    capabilityJson: null,
+    defaultParamsJson: {
+      ratio: '16x9',
+      duration: 5,
+      resolution: '720P',
+      billingRule: {
+        billingType: 'per_second',
+        durationMode: 'reference_plus_generation',
+        pricingMatrix: {
+          '480P': { text_to_video: 0.66, uploaded_video: 0.4 },
+          '720P': { text_to_video: 1.42, uploaded_video: 0.8584 },
+          '1080P': { text_to_video: 3.544, uploaded_video: 2.1568 },
+          '4K': { text_to_video: 7.22, uploaded_video: 4.4432 },
+        },
+      },
+    },
+  },
+  {
+    category: 'VIDEO',
+    label: 'Seedance 2.0 Fast',
+    modelKey: 'doubao-seedance-2.0-fast',
+    description: 'Seedance 2.0 快速版，支持 480P/720P。',
+    sortOrder: 110,
+    isEnabled: true,
+    capabilityJson: null,
+    defaultParamsJson: {
+      ratio: '16x9',
+      duration: 5,
+      resolution: '720P',
+      billingRule: {
+        billingType: 'per_second',
+        durationMode: 'reference_plus_generation',
+        pricingMatrix: {
+          '480P': { text_to_video: 0.5312, uploaded_video: 0.316 },
+          '720P': { text_to_video: 1.1416, uploaded_video: 0.684 },
+          '1080P': { text_to_video: 0, uploaded_video: 0 },
+          '4K': { text_to_video: 0, uploaded_video: 0 },
+        },
+      },
+    },
+  },
+  {
+    category: 'VIDEO',
+    label: 'Seedance 2.0 Mini',
+    modelKey: 'doubao-seedance-2.0-mini',
+    description: 'Seedance 2.0 轻量版，支持 480P/720P。',
+    sortOrder: 120,
+    isEnabled: true,
+    capabilityJson: null,
+    defaultParamsJson: {
+      ratio: '16x9',
+      duration: 5,
+      resolution: '720P',
+      billingRule: {
+        billingType: 'per_second',
+        durationMode: 'reference_plus_generation',
+        pricingMatrix: {
+          '480P': { text_to_video: 0.2632, uploaded_video: 0.1608 },
+          '720P': { text_to_video: 0.5712, uploaded_video: 0.3456 },
+          '1080P': { text_to_video: 0, uploaded_video: 0 },
+          '4K': { text_to_video: 0, uploaded_video: 0 },
+        },
+      },
+    },
+  },
+]
+
+const modelVariantPresetOptions = computed(() => seedancePresetModels.map((item) => ({
+  label: item.label,
+  modelKey: item.modelKey,
+  payload: item,
+})))
+
+const cloneJsonObject = <T extends Record<string, any> | null>(value: T): T => {
+  if (!value) return value
+  return JSON.parse(JSON.stringify(value)) as T
+}
+
+const applyModelPresetPayload = (payload: AdminProviderModelPayload) => {
+  modelForm.category = payload.category
+  modelForm.label = payload.label
+  modelForm.modelKey = payload.modelKey
+  modelForm.description = payload.description || ''
+  modelForm.sortOrder = Number(payload.sortOrder) || 0
+  modelForm.isEnabled = payload.isEnabled !== false
+  modelForm.capabilityJson = cloneJsonObject(payload.capabilityJson) || {}
+
+  const defaultParamsJson = cloneJsonObject(payload.defaultParamsJson) || {}
+  const billingRule = (defaultParamsJson.billingRule || {}) as Record<string, any>
+  modelForm.defaultParamsJsonText = stringifyJson(defaultParamsJson)
+  modelForm.billingPower = Number(billingRule.power || 0) || 0
+  modelForm.billingTokens = Number(billingRule.tokens || 1000) || 1000
+  modelForm.billingType = String(billingRule.billingType || 'flat') === 'per_second' ? 'per_second' : 'flat'
+  modelForm.pricingMatrix = (billingRule.pricingMatrix && typeof billingRule.pricingMatrix === 'object')
+    ? cloneJsonObject(billingRule.pricingMatrix)
+    : {}
+}
+
+const handleModelPresetChange = () => {
+  const matchedPreset = modelVariantPresetOptions.value.find(item => item.modelKey === selectedModelPresetKey.value)
+  if (!matchedPreset) return
+  applyModelPresetPayload(matchedPreset.payload)
+}
 
 const filteredProviders = computed(() => {
   return providers.value.filter((provider) => {
@@ -806,6 +993,7 @@ const normalizeMembershipLevels = (value: string) => {
 
 const resetModelForm = () => {
   editingModelId.value = ''
+  selectedModelPresetKey.value = ''
   modelForm.category = 'CHAT'
   modelForm.label = ''
   modelForm.modelKey = ''
@@ -816,6 +1004,8 @@ const resetModelForm = () => {
   modelForm.defaultParamsJsonText = ''
   modelForm.billingPower = 0
   modelForm.billingTokens = 1000
+  modelForm.billingType = 'flat'
+  modelForm.pricingMatrix = {}
   modelForm.membershipLevelsText = ''
   modelForm.maxContext = 3
   modelForm.isDefault = false
@@ -825,6 +1015,9 @@ const resetModelForm = () => {
 // 编辑模型时统一回填，避免能力字段和默认参数丢失。
 const applyModelForm = (model: AdminProviderModelItem) => {
   editingModelId.value = model.id
+  selectedModelPresetKey.value = modelVariantPresetOptions.value.some(item => item.modelKey === model.modelKey)
+    ? model.modelKey
+    : ''
   modelForm.category = model.category
   modelForm.label = model.label
   modelForm.modelKey = model.modelKey
@@ -840,6 +1033,10 @@ const applyModelForm = (model: AdminProviderModelItem) => {
   modelForm.defaultParamsJsonText = stringifyJson(defaultParamsJson)
   modelForm.billingPower = Number(billingRule.power || 0) || 0
   modelForm.billingTokens = Number(billingRule.tokens || 1000) || 1000
+  modelForm.billingType = String(billingRule.billingType || 'flat') === 'per_second' ? 'per_second' : 'flat'
+  modelForm.pricingMatrix = (billingRule.pricingMatrix && typeof billingRule.pricingMatrix === 'object')
+    ? { ...billingRule.pricingMatrix }
+    : {}
   modelForm.membershipLevelsText = Array.isArray(defaultParamsJson.membershipLevels)
     ? defaultParamsJson.membershipLevels.join(', ')
     : ''
@@ -1138,6 +1335,27 @@ const handleBatchImportModels = async () => {
   }
 }
 
+const handleImportSeedancePresets = async () => {
+  if (!selectedProvider.value) {
+    ElMessage.error('请选择厂商')
+    return
+  }
+
+  try {
+    modelSaving.value = true
+    await batchUpsertAdminProviderModels(selectedProvider.value.id, {
+      items: seedancePresetModels,
+    })
+    await loadModels(selectedProvider.value.id)
+    await loadProviders()
+    ElMessage.success('Seedance 2.0 标准版 / Fast / Mini 已导入')
+  } catch (error: any) {
+    ElMessage.error(error?.message || '导入 Seedance 预设失败')
+  } finally {
+    modelSaving.value = false
+  }
+}
+
 const openEditModelDialog = (model: AdminProviderModelItem) => {
   applyModelForm(model)
   activeModelTab.value = 'basic'
@@ -1163,13 +1381,25 @@ const toggleModelCapability = (key: string) => {
 
 const mergeModelDefaultParams = () => {
   const parsedDefaultParams = parseOptionalJson(modelForm.defaultParamsJsonText, '默认参数 JSON') || {}
+  const billingUnit = isVideoModelCategory.value
+    ? 'per_second'
+    : isImageModelCategory.value
+      ? 'per_image'
+      : 'per_tokens'
 
   return {
     ...parsedDefaultParams,
-    billingRule: {
-      power: Number(modelForm.billingPower) || 0,
-      tokens: Number(modelForm.billingTokens) || 1000,
-    },
+    billingRule: isVideoModelCategory.value && modelForm.billingType === 'per_second'
+      ? {
+          billingType: 'per_second',
+          pricingMatrix: modelForm.pricingMatrix,
+          durationMode: 'reference_plus_generation',
+        }
+      : {
+          power: Number(modelForm.billingPower) || 0,
+          tokens: Number(modelForm.billingTokens) || 1000,
+          unit: billingUnit,
+        },
     membershipLevels: normalizeMembershipLevels(modelForm.membershipLevelsText),
     maxContext: Number(modelForm.maxContext) || 3,
     isDefault: Boolean(modelForm.isDefault),
@@ -1203,10 +1433,36 @@ const buildModelPayload = (): AdminProviderModelPayload => {
   }
 }
 
-const readModelPrice = (model: AdminProviderModelItem) => {
+const formatModelPrice = (model: AdminProviderModelItem) => {
   const defaultParams = (model.defaultParamsJson || {}) as Record<string, any>
   const billingRule = (defaultParams.billingRule || {}) as Record<string, any>
-  return Number(billingRule.power || 0) || 0
+  const billingType = String(billingRule.billingType || 'flat')
+
+  // 视频按秒计费：从 pricingMatrix 找最低价展示
+  if (billingType === 'per_second' && model.category === 'VIDEO') {
+    const matrix = billingRule.pricingMatrix as Record<string, Record<string, number>> | undefined
+    if (matrix) {
+      const rates: number[] = []
+      for (const res of Object.keys(matrix)) {
+        const row = matrix[res]
+        if (row?.text_to_video) rates.push(Number(row.text_to_video))
+        if (row?.uploaded_video) rates.push(Number(row.uploaded_video))
+      }
+      if (rates.length === 0) return '未配置'
+      const min = Math.min(...rates)
+      const max = Math.max(...rates)
+      return min === max ? `${min} 积分/秒` : `${min}~${max} 积分/秒`
+    }
+    return '按秒计费'
+  }
+
+  const pointCost = Number(billingRule.power || 0) || 0
+  if (pointCost <= 0) return '免费'
+  if (model.category === 'VIDEO') return `${pointCost} 积分/秒`
+  if (model.category === 'IMAGE') return `${pointCost} 积分/张`
+
+  const tokens = Number(billingRule.tokens || 1000) || 1000
+  return `${pointCost} 积分/${tokens} Tokens`
 }
 
 const formatConnectivityStep = (step: AdminProviderConnectivityStep) => {

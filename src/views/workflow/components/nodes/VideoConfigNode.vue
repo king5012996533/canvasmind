@@ -34,6 +34,7 @@ const progress = ref(0)
 interface WorkflowVideoModelLike {
   ratios?: string[]
   durs?: Array<{ label: string; key: number | string }>
+  defaultParams?: Record<string, any>
 }
 
 const isTextNode = (node?: WorkflowCanvasNode): node is WorkflowCanvasNode<'text'> => node?.type === 'text'
@@ -51,6 +52,13 @@ const readVideoResultUrl = (result: { data?: Array<{ url?: string }> | Record<st
 const model = ref(props.data?.model || getDefaultVideoModelKey())
 const ratio = ref(props.data?.ratio || '16x9')
 const duration = ref(props.data?.duration || 5)
+const resolution = ref(props.data?.resolution || '720P')
+const baseResolutionOptions = [
+  { label: '480P', value: '480P' },
+  { label: '720P', value: '720P' },
+  { label: '1080P', value: '1080P' },
+  { label: '4K', value: '4K' },
+]
 
 const currentModel = computed<WorkflowVideoModelLike | null>(() => getModelByName(model.value) as WorkflowVideoModelLike | null)
 const modelOptions = computed(() => getAllVideoModels().map(m => ({ label: m.label, value: m.key })))
@@ -59,16 +67,28 @@ const ratioOptions = computed(() => (currentModel.value?.ratios || []).map((r) =
   return { label: item?.label || r, value: r }
 }))
 const durationOptions = computed(() => (currentModel.value?.durs || []).map((d) => ({ label: d.label, value: d.key })))
+const resolutionOptions = computed(() => {
+  const billingRule = currentModel.value?.defaultParams?.billingRule as Record<string, any> | undefined
+  const matrix = billingRule?.pricingMatrix as Record<string, Record<string, number>> | undefined
+  if (!matrix || billingRule?.billingType !== 'per_second') return baseResolutionOptions
+
+  const supported = baseResolutionOptions.filter((item) => {
+    const row = matrix[item.value]
+    return Number(row?.text_to_video || 0) > 0 || Number(row?.uploaded_video || 0) > 0
+  })
+  return supported.length ? supported : baseResolutionOptions
+})
 
 // 连接的输入
 const promptCount = computed(() => edges.value.filter(e => e.target === props.id && (e.type === 'promptOrder' || !e.type)).length)
 
 watch(
-  [() => props.data?.model, () => props.data?.ratio, () => props.data?.duration],
-  ([m, r, d]) => {
+  [() => props.data?.model, () => props.data?.ratio, () => props.data?.duration, () => props.data?.resolution],
+  ([m, r, d, res]) => {
     if (m !== undefined) model.value = m
     if (r !== undefined) ratio.value = r
     if (d !== undefined) duration.value = d
+    if (res !== undefined) resolution.value = res
   },
 )
 
@@ -77,8 +97,20 @@ onMounted(() => {
 })
 
 const updateConfig = () => {
-  updateNode(props.id, { model: model.value, ratio: ratio.value, duration: duration.value })
+  updateNode(props.id, {
+    model: model.value,
+    ratio: ratio.value,
+    duration: duration.value,
+    resolution: resolution.value,
+  })
 }
+
+watch(resolutionOptions, (options) => {
+  if (!options.some(option => option.value === resolution.value)) {
+    resolution.value = String(options[0]?.value || '720P')
+    updateConfig()
+  }
+})
 
 // 收集输入
 const collectInputs = () => {
@@ -114,6 +146,7 @@ const handleGenerate = async () => {
     if (prompt) formData.append('prompt', prompt)
     formData.append('ratio', ratio.value)
     formData.append('duration', String(duration.value))
+    formData.append('resolution', resolution.value)
 
     for (const img of images) {
       if (img.url.startsWith('data:') || img.url.startsWith('blob:')) {
@@ -135,7 +168,13 @@ const handleGenerate = async () => {
     const createdOutputNodeId = outputNodeId
     setTimeout(() => updateNodeInternals([createdOutputNodeId]), 50)
 
-    const task = await createVideoTask(formData)
+    const task = await createVideoTask(formData, {
+      billingParams: {
+        resolution: resolution.value,
+        duration: Number(duration.value) || 5,
+        mode: images.length > 0 ? 'uploaded_video' : 'text_to_video',
+      },
+    })
     const taskId = task?.id || task?.task_id
 
     if (taskId && providerId) {
@@ -217,6 +256,11 @@ watch(
         <div v-if="durationOptions.length">
           <label class="wf-node-label">时长</label>
           <WfSelect v-model="duration" :options="durationOptions" @change="updateConfig" />
+        </div>
+
+        <div>
+          <label class="wf-node-label">分辨率</label>
+          <WfSelect v-model="resolution" :options="resolutionOptions" @change="updateConfig" />
         </div>
 
         <button class="wf-node-generate-btn amber" :disabled="isGenerating" @click="handleGenerate">

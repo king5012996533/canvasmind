@@ -240,14 +240,68 @@ const readModelBillingPower = (value: unknown) => {
   return Math.max(0, Number((billingRule as Record<string, unknown>).power || 0))
 }
 
+// ── 视频按秒计费 ──
+
+export interface VideoBillingParams {
+  resolution?: string    // "480P" | "720P" | "1080P" | "4K"
+  duration?: number      // 生成时长（秒）
+  referenceDuration?: number  // 参考时长（秒，图生视频的参考视频时长）
+  imageUrl?: string      // 有值 = 图生视频（uploaded_video），无值 = 文生视频（text_to_video）
+}
+
+// 读取 billingRule 的 billingType，默认 "flat"
+const readBillingType = (defaultParams: unknown): string => {
+  if (!defaultParams || typeof defaultParams !== 'object' || Array.isArray(defaultParams)) return 'flat'
+  const br = (defaultParams as Record<string, unknown>).billingRule
+  if (!br || typeof br !== 'object' || Array.isArray(br)) return 'flat'
+  return String((br as Record<string, unknown>).billingType || 'flat')
+}
+
+// 按秒计费：从 pricingMatrix 查单价，乘以总时长
+// 注意：查不到价格时抛业务错误，绝不返回 0（否则等于免费生成）
+const resolveVideoPerSecondCost = (
+  defaultParams: unknown,
+  params: VideoBillingParams,
+): number => {
+  if (!defaultParams || typeof defaultParams !== 'object' || Array.isArray(defaultParams)) {
+    throw new Error('视频模型计费配置缺失')
+  }
+  const br = (defaultParams as Record<string, unknown>).billingRule as Record<string, unknown> | undefined
+  if (!br || typeof br !== 'object') {
+    throw new Error('视频模型计费规则缺失')
+  }
+
+  const matrix = br.pricingMatrix as Record<string, Record<string, number>> | undefined
+  if (!matrix || typeof matrix !== 'object') {
+    throw new Error('视频模型定价矩阵缺失')
+  }
+
+  const resolution = String(params.resolution || '720P').trim()
+  const mode = params.imageUrl ? 'uploaded_video' : 'text_to_video'
+  const ratePerSecond = matrix[resolution]?.[mode]
+  if (typeof ratePerSecond !== 'number' || ratePerSecond <= 0) {
+    throw new Error(`视频模型未配置 ${resolution} ${mode === 'uploaded_video' ? '图生视频' : '文生视频'} 定价`)
+  }
+
+  const genDuration = Math.max(0, Number(params.duration || 5))
+  const refDuration = Math.max(0, Number(params.referenceDuration || 0))
+  const totalDuration = br.durationMode === 'reference_plus_generation'
+    ? refDuration + genDuration
+    : genDuration
+
+  return Math.ceil(ratePerSecond * totalDuration)
+}
+
 // 读取后台模型配置中的积分消耗规则，统一给生成链路使用。
 // capabilityFlags 用于"联网搜索 / 深度思考"等扩展能力开关，按 capabilityJson 配置的
 // billingMultiplier 放大基础点数，让额外成本能反映在用户扣点上。
+// 视频模型支持 per_second 按秒计费：billingType="per_second" + pricingMatrix + durationMode
 export const resolveGenerationPointCost = async (input: {
   providerId: string
   modelKey: string
   endpointType: 'chat' | 'image' | 'video'
   capabilityFlags?: ModelCapabilityFlags | null
+  requestParams?: VideoBillingParams
 }) => {
   const providerId = String(input.providerId || '').trim()
   const modelKey = String(input.modelKey || '').trim()
@@ -284,8 +338,13 @@ export const resolveGenerationPointCost = async (input: {
     }
   }
 
-  // 基础点数。
-  const basePointCost = readModelBillingPower(model.defaultParamsJson)
+  // 计费类型判断：per_second（视频按秒）或 flat（图片/对话固定积分）
+  const billingType = readBillingType(model.defaultParamsJson)
+
+  // 基础点数：视频按秒计费走 pricingMatrix，其余走 billingRule.power
+  const basePointCost = billingType === 'per_second' && input.endpointType === 'video'
+    ? resolveVideoPerSecondCost(model.defaultParamsJson, input.requestParams || {})
+    : readModelBillingPower(model.defaultParamsJson)
 
   // 应用能力开关倍率（联网/深度思考通常更贵），未配置或不支持则倍率为 1。
   const capabilitySpec = (() => {

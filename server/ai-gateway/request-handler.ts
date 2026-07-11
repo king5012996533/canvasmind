@@ -7,8 +7,21 @@ import {
 import { forwardGatewayPayload, forwardMultipartRequest } from './forward'
 import { resolveGatewayProviderUpstream } from '../provider-config/service'
 import { requireCurrentSessionUser } from '../auth/session'
-import { consumeGenerationPoints, refundGenerationPoints, resolveGenerationPointCost } from '../marketing-center/service'
+import { consumeGenerationPoints, refundGenerationPoints, resolveGenerationPointCost, type VideoBillingParams } from '../marketing-center/service'
 import { normalizeChargeableEndpointType, type AiEndpointType } from '../../src/shared/provider-endpoint-strategy'
+
+// 从请求头提取视频计费参数（分辨率、时长、模式）
+const extractVideoBillingParams = (req: any, endpointType: string): VideoBillingParams | undefined => {
+  if (endpointType !== 'video') return undefined
+  const resolution = String(req.headers['x-billing-resolution'] || '').trim() || undefined
+  const duration = Number(req.headers['x-billing-duration'] || 0) || undefined
+  const referenceDuration = Number(req.headers['x-billing-reference-duration'] || 0) || undefined
+  const billingMode = String(req.headers['x-billing-mode'] || '').trim()
+  // 有 x-billing-mode=uploaded_video 或 x-billing-image-url 时视为图生视频
+  const imageUrl = billingMode === 'uploaded_video' ? 'set' : (String(req.headers['x-billing-image-url'] || '').trim() || undefined)
+  if (!resolution && !duration) return undefined
+  return { resolution, duration, referenceDuration, imageUrl }
+}
 
 const shouldExposeGatewayDebug = () => String(process.env.AI_GATEWAY_DEBUG_HEADERS || '').trim() === 'true'
 
@@ -71,6 +84,7 @@ export const handleAiGatewayRequest = async (req: any, res: any) => {
           providerId: headerProviderId,
           modelKey: headerModelKey,
           endpointType: billedHeaderEndpointType as 'image' | 'video',
+          requestParams: extractVideoBillingParams(req, billedHeaderEndpointType),
         })
         : { pointCost: 0, modelId: '', modelName: '' }
 
@@ -188,6 +202,7 @@ export const handleAiGatewayRequest = async (req: any, res: any) => {
         providerId: normalized.providerId,
         modelKey: normalized.modelKey,
         endpointType: billedJsonEndpointType as 'image' | 'video',
+        requestParams: extractVideoBillingParams(req, billedJsonEndpointType),
       })
       : { pointCost: 0, modelId: '', modelName: '' }
 

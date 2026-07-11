@@ -150,6 +150,7 @@ export const VIDEO_RATIO_LIST: SizeOption[] = [
 export const VIDEO_DURATION_OPTIONS: DurationOption[] = [
   { label: '5 秒', key: 5 },
   { label: '10 秒', key: 10 },
+  { label: '15 秒', key: 15 },
 ]
 
 // 兼容旧代码的导出，避免类型引用报错。

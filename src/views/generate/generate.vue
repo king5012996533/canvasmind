@@ -46,6 +46,7 @@ import type {
 } from '@/shared/research/research-types'
 import { normalizeGenerationErrorMessage } from '@/shared/generation-error'
 import { appendImageReferencesToRequestBody } from '@/shared/image-generation-request'
+import { buildAssetUrl } from '@/api/http'
 import { AUTH_LOGIN_SUCCESS_EVENT, useAuthStore } from '@/stores/auth'
 import { useLoginModalStore } from '@/stores/login-modal'
 import { useSystemSettingsStore } from '@/stores/system-settings'
@@ -1732,9 +1733,11 @@ const syncRecordWithPersisted = (record: GeneratingRecord, saved: PersistedGener
   record.progressPercent = saved.done
       ? 100
       : Math.max(record.progressPercent || 0, mapTaskStageToProgressPercent(record.progressStage))
-  record.images = Array.isArray(saved.images) ? [...saved.images] : []
+  record.images = Array.isArray(saved.images)
+      ? saved.images.map(buildAssetUrl).filter(Boolean)
+      : []
   if (Array.isArray(saved.referenceImages) && saved.referenceImages.length) {
-    record.referenceImages = [...saved.referenceImages]
+    record.referenceImages = saved.referenceImages.map(buildAssetUrl).filter(Boolean)
   } else if (!Array.isArray(record.referenceImages)) {
     record.referenceImages = []
   }
@@ -1753,7 +1756,10 @@ const syncRecordWithPersisted = (record: GeneratingRecord, saved: PersistedGener
       result: {
         ...saved.agentRun.result,
         images: Array.isArray(saved.agentRun.result?.images)
-            ? [...saved.agentRun.result.images]
+            ? saved.agentRun.result.images.map(image => ({
+                ...image,
+                imageSrc: buildAssetUrl(image.imageSrc),
+              }))
             : [],
       },
       steps: Array.isArray(saved.agentRun.steps) ? [...saved.agentRun.steps] : [],
@@ -2394,9 +2400,8 @@ const handleGenerationTaskStreamEvent = (recordId: string, streamEvent: Generati
   // 终止态（completed/failed/stopped，event.done=true）的最终 record 已由 SSE 带回并通过
   // syncRecordWithPersisted 同步到本地，无需再 PATCH 回写。回写会触发服务端二次
   // normalizeOutputs + 事务 + outputs 重建 + 资产同步，纯属冗余。仅在中间态持久化阶段对话。
-  if ((stageConversationChanged || isResearchTaskRecord) && !event.done) {
-    schedulePersistRecord(targetRecord)
-  }
+  // Standard task events are read-only on the client. The server owns record
+  // persistence; writing an intermediate snapshot back can erase final assets.
 
   if (event.done) {
     const controller = taskStreamControllers.get(recordId)
@@ -3249,6 +3254,8 @@ onUnmounted(() => {
           v-model:visible="previewVisible"
           v-model:currentIndex="previewIndex"
           :images="previewImages"
+          can-edit
+          can-regenerate
           @download="handlePreviewDownload"
           @edit="handlePreviewEdit"
           @regenerate="handlePreviewRegenerate"

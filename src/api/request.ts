@@ -24,8 +24,25 @@ interface RequestOptions {
   providerId?: string
   modelKey?: string
   signal?: AbortSignal
+  /** 视频按秒计费参数，传入后自动转为 x-billing-* headers */
+  billingParams?: {
+    resolution?: string
+    duration?: number
+    referenceDuration?: number
+    mode?: 'text_to_video' | 'uploaded_video'
+  }
 }
 const isFormData = (value: unknown): value is FormData => typeof FormData !== 'undefined' && value instanceof FormData
+
+// 将计费参数转为 x-billing-* 请求头，供后端 AI 网关读取
+const buildBillingHeaders = (params: NonNullable<RequestOptions['billingParams']>): Record<string, string> => {
+  const headers: Record<string, string> = {}
+  if (params.resolution) headers['x-billing-resolution'] = params.resolution
+  if (params.duration) headers['x-billing-duration'] = String(params.duration)
+  if (params.referenceDuration) headers['x-billing-reference-duration'] = String(params.referenceDuration)
+  if (params.mode) headers['x-billing-mode'] = params.mode
+  return headers
+}
 
 
 const notifyMarketingPointsUpdated = (response: Response) => {
@@ -66,6 +83,7 @@ export const request = async (
         'x-upstream-endpoint-type': type,
         ...(modelKey ? { 'x-upstream-model-key': modelKey } : {}),
         'x-upstream-method': normalizeGatewayMethod(options.method),
+        ...(options.billingParams ? buildBillingHeaders(options.billingParams) : {}),
       },
       body: formData,
     })
@@ -88,6 +106,7 @@ export const request = async (
     signal: options.signal,
     headers: {
       'Content-Type': 'application/json',
+      ...(options.billingParams ? buildBillingHeaders(options.billingParams) : {}),
     },
     body: JSON.stringify(await createGatewayPayload(type, options)),
   })

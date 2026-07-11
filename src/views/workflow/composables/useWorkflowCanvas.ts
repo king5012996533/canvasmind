@@ -37,6 +37,7 @@ export interface WorkflowVideoConfigNodeData extends WorkflowNodeDataBase {
   ratio?: string
   duration?: number
   model?: string
+  resolution?: string
 }
 
 export interface WorkflowImageNodeData extends WorkflowNodeDataBase {
@@ -205,6 +206,7 @@ const getDefaultNodeData = <T extends WorkflowNodeType>(type: T): WorkflowNodeDa
         prompt: '',
         ratio: model?.defaultParams?.ratio || '16x9',
         duration: model?.defaultParams?.duration || 5,
+        resolution: String(model?.defaultParams?.resolution || '720P'),
         model: getDefaultVideoModelKey(),
         label: '图生视频'
       } as WorkflowNodeDataMap[T]

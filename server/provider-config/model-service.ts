@@ -1,7 +1,55 @@
 import type { ModelCategory } from '@prisma/client'
+import { execSync } from 'node:child_process'
 import { prisma } from '../db/prisma'
 import { getOrSetJsonCache, invalidateRedisCaches, redisKeys } from '../redis'
 import { ensureProviderSeedData, getAdminProviderDetail } from './service'
+
+// Node.js 24 fetch 对某些 HTTPS 站点有 IPv6 连接超时问题，用 curl 后备
+import { writeFileSync, unlinkSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+
+async function safeFetch(url: string, init?: RequestInit): Promise<Response> {
+  try {
+    const response = await fetch(url, init)
+    return response
+  } catch (err: any) {
+    if (err?.code === 'UND_ERR_CONNECT_TIMEOUT' || err?.message?.includes('fetch failed') || err?.message?.includes('Timeout')) {
+      console.log(`[safeFetch] fetch 失败，使用 curl 后备: ${err.message}`)
+      const method = init?.method || 'GET'
+      const headers = init?.headers || {}
+      const auth = typeof headers === 'object' && 'Authorization' in headers ? String(headers['Authorization'] || '') : ''
+      const body = init?.body ? String(init.body) : ''
+
+      // GET 请求直接用 curl
+      if (method === 'GET' || !body) {
+        let curlCmd = `curl -s --max-time 30 -X ${method}`
+        if (auth) curlCmd += ` -H "Authorization: ${auth}"`
+        curlCmd += ` "${url}"`
+        const output = execSync(curlCmd, { encoding: 'utf-8', timeout: 35000 })
+        return new Response(output, { status: 200, statusText: 'OK' })
+      }
+
+      // POST 请求：body 写入临时文件，避免 shell 转义问题
+      const tmpFile = join(tmpdir(), `safeFetch_${Date.now()}.json`)
+      writeFileSync(tmpFile, body, 'utf-8')
+
+      let curlCmd = `curl -s --max-time 60 -X ${method}`
+      if (auth) curlCmd += ` -H "Authorization: ${auth}"`
+      curlCmd += ` -H "Content-Type: application/json"`
+      curlCmd += ` -d @${tmpFile}`
+      curlCmd += ` "${url}"`
+
+      try {
+        const output = execSync(curlCmd, { encoding: 'utf-8', timeout: 65000 })
+        return new Response(output, { status: 200, statusText: 'OK' })
+      } finally {
+        try { unlinkSync(tmpFile) } catch {}
+      }
+    }
+    throw err
+  }
+}
 
 export interface ProviderModelPayload {
   category?: 'CHAT' | 'IMAGE' | 'VIDEO'
@@ -178,7 +226,8 @@ const runTimedProviderTest = async (
 ) => {
   const startedAt = Date.now()
   const controller = new AbortController()
-  const timeout = setTimeout(() => controller.abort(), 12000)
+  const timeoutMs = name === 'image' || name === 'imageEdit' ? 60000 : 12000
+  const timeout = setTimeout(() => controller.abort(), timeoutMs)
 
   try {
     const detail = await runner(controller.signal)
@@ -235,20 +284,38 @@ export const discoverProviderModels = async (providerId: string) => {
       const { baseUrl, apiKey, provider } = await getProviderRuntimeConnection(normalizedProviderId)
       const requestUrl = resolveProviderModelsUrl(baseUrl)
 
-      const response = await fetch(requestUrl, {
-        method: 'GET',
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-        },
-      })
-
-      if (!response.ok) {
-        const responseText = await response.text().catch(() => '')
-        throw new Error(responseText || `拉取模型列表失败 (${response.status})`)
+      // 使用 curl 作为后备（Node.js 24 fetch 对某些 HTTPS 站点有 IPv6 连接问题）
+      let responseText: string
+      try {
+        const response = await safeFetch(requestUrl, {
+          method: 'GET',
+          headers: { Authorization: `Bearer ${apiKey}` },
+        })
+        if (!response.ok) {
+          const responseText2 = await response.text().catch(() => '')
+          throw new Error(responseText2 || `拉取模型列表失败 (${response.status})`)
+        }
+        responseText = await response.text()
+      } catch (fetchErr: any) {
+        if (fetchErr?.code === 'UND_ERR_CONNECT_TIMEOUT' || fetchErr?.message?.includes('fetch failed') || fetchErr?.message?.includes('Timeout')) {
+          console.log(`[discoverProviderModels] fetch 失败，使用 curl 后备: ${fetchErr.message}`)
+          const { execSync } = await import('node:child_process')
+          responseText = execSync(`curl -s --max-time 15 -H "Authorization: Bearer ${apiKey}" "${requestUrl}"`, { encoding: 'utf-8' })
+        } else {
+          throw fetchErr
+        }
       }
 
-      const data = await response.json().catch(() => null) as Record<string, any> | null
+      const data = JSON.parse(responseText) as Record<string, any> | null
+      // 检查 API 是否返回了错误
+      if (data?.error) {
+        const errMsg = typeof data.error === 'string' ? data.error : data.error?.message || JSON.stringify(data.error)
+        throw new Error(`厂商 API 返回错误: ${errMsg}`)
+      }
       const rawModels = Array.isArray(data?.data) ? data!.data : []
+      if (rawModels.length === 0) {
+        throw new Error('该厂商 API 未返回任何模型，请检查 API Key 是否正确或该端点是否支持 /v1/models')
+      }
       const items = rawModels
         .map((item, index) => {
           const record = item && typeof item === 'object' ? item as Record<string, any> : {}
@@ -294,7 +361,7 @@ export const testProviderConnectivity = async (providerId: string) => {
 
   tests.push(runTimedProviderTest('models', async (signal) => {
     const requestUrl = resolveProviderModelsUrl(baseUrl)
-    const response = await fetch(requestUrl, {
+    const response = await safeFetch(requestUrl, {
       method: 'GET',
       headers: { Authorization: `Bearer ${apiKey}` },
       signal,
@@ -315,7 +382,7 @@ export const testProviderConnectivity = async (providerId: string) => {
       if (!modelKey) {
         throw new Error('未配置可用对话模型')
       }
-      const response = await fetch(resolveProviderEndpointUrl(baseUrl, provider.chatEndpoint), {
+      const response = await safeFetch(resolveProviderEndpointUrl(baseUrl, provider.chatEndpoint), {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${apiKey}`,
@@ -342,7 +409,7 @@ export const testProviderConnectivity = async (providerId: string) => {
       if (!modelKey) {
         throw new Error('未配置可用图片模型')
       }
-      const response = await fetch(resolveProviderEndpointUrl(baseUrl, provider.imageEndpoint), {
+      const response = await safeFetch(resolveProviderEndpointUrl(baseUrl, provider.imageEndpoint), {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${apiKey}`,
@@ -352,7 +419,7 @@ export const testProviderConnectivity = async (providerId: string) => {
           model: modelKey,
           prompt: 'connection test',
           n: 1,
-          size: '256x256',
+          size: '1024x1024',
         }),
         signal,
       })
@@ -372,7 +439,7 @@ export const testProviderConnectivity = async (providerId: string) => {
       form.append('model', modelKey)
       form.append('prompt', 'connection test')
       form.append('image', new Blob([png1x1], { type: 'image/png' }), 'connection-test.png')
-      const response = await fetch(resolveProviderEndpointUrl(baseUrl, provider.imageEditEndpoint), {
+      const response = await safeFetch(resolveProviderEndpointUrl(baseUrl, provider.imageEditEndpoint), {
         method: 'POST',
         headers: { Authorization: `Bearer ${apiKey}` },
         body: form,

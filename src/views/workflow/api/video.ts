@@ -8,6 +8,13 @@ const DEFAULT_VIDEO_ENDPOINT = '/videos'
 
 export interface WorkflowVideoTaskOptions {
   endpoint?: string
+  /** 计费参数：分辨率、时长、模式 */
+  billingParams?: {
+    resolution?: string
+    duration?: number
+    referenceDuration?: number
+    mode?: 'text_to_video' | 'uploaded_video'
+  }
 }
 
 export interface WorkflowVideoTaskStatusResult {
@@ -22,12 +29,13 @@ export interface WorkflowVideoTaskStatusResult {
 }
 
 export const createVideoTask = (data: FormData, options: WorkflowVideoTaskOptions = {}) => {
-  const { endpoint } = options
+  const { endpoint, billingParams } = options
   return request({
     url: endpoint || DEFAULT_VIDEO_ENDPOINT,
     method: 'post',
     data,
-    headers: { 'Content-Type': 'multipart/form-data' }
+    headers: { 'Content-Type': 'multipart/form-data' },
+    billingParams,
   }, 'video')
 }
 
