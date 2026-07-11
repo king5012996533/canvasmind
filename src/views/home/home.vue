@@ -46,7 +46,8 @@
 
 <script setup>
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { computed, defineAsyncComponent, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, ref, watch, onMounted } from 'vue'
+import { useRoute } from 'vue-router'
 import FrontstagePageShell from '@/components/layout/FrontstagePageShell.vue'
 import HomeHeader from '../../components/home/components/HomeHeader.vue'
 import TabsSection from '@components/home/components/TabsSection.vue'
@@ -54,6 +55,15 @@ import TabsSection from '@components/home/components/TabsSection.vue'
 const HomeDetailModalFrom = defineAsyncComponent(() => import('@components/home/components/HomeDetailModalFrom.vue'))
 import HomeFooter from '@components/home/components/HomeFooter.vue'
 import { applyAssetAction } from '@/api/asset-items'
+
+const route = useRoute()
+
+// 灰度提示：从灰度页面跳转过来时显示即将上线提示
+onMounted(() => {
+  if (route.query.grayScale === '1') {
+    ElMessage.info('该功能正在灰度测试中，即将上线，敬请期待')
+  }
+})
 
 const handleTabChange = (index) => {
   console.log('Tab changed to:', index)
