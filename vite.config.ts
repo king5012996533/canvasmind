@@ -62,6 +62,7 @@ const createMockAgentRawPlugin = () => ({
 
 // https://vite.dev/config/
 export default defineConfig({
+  base: '/mind/',
   plugins: [
     vue(),
     tailwindcss(),
