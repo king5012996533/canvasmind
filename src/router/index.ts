@@ -51,7 +51,6 @@ const routes: RouteRecordRaw[] = [
     path: '/canvas',
     name: 'Canvas',
     component: Canana,
-    meta: { grayScale: true },
   },
   {
     path: '/account',
@@ -75,7 +74,6 @@ const routes: RouteRecordRaw[] = [
     path: '/workflow',
     name: 'Workflow',
     component: Workflow,
-    meta: { grayScale: true },
   },
   {
     path: '/agentic-assets-canvas',
@@ -256,7 +254,7 @@ const routes: RouteRecordRaw[] = [
 ]
 
 const router = createRouter({
-  history: createWebHistory(),
+  history: createWebHistory(import.meta.env.BASE_URL),
   routes,
 })
 
@@ -283,11 +281,6 @@ router.beforeEach(async (to) => {
     return {
       path: '/',
     }
-  }
-
-  // 灰度页面：跳转到首页并提示即将上线
-  if (to.meta?.grayScale) {
-    return { path: '/', query: { grayScale: '1' } }
   }
 
   if (!to.meta?.requiresAuth) {
