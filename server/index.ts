@@ -56,6 +56,8 @@ const DEFAULT_STATIC_DIST_DIR = path.resolve(process.cwd(), 'dist')
 // 上传文件公开访问前缀。
 const UPLOADS_PUBLIC_PATH_PREFIX = '/uploads/'
 
+const CLIENT_BASE_PATH = '/mind'
+
 // 允许跨域访问的来源列表。
 const DEFAULT_CORS_ALLOWED_ORIGINS = [
   'http://localhost:5010',
@@ -281,6 +283,18 @@ const handleStaticRequest = async (req: any, res: any, requestPath: string) => {
 }
 
 // 为响应写入统一的跨域头。
+const normalizeMountedRequestPath = (requestPath: string) => {
+  if (requestPath === CLIENT_BASE_PATH) {
+    return '/'
+  }
+
+  if (requestPath.startsWith(`${CLIENT_BASE_PATH}/`)) {
+    return requestPath.slice(CLIENT_BASE_PATH.length) || '/'
+  }
+
+  return requestPath
+}
+
 const applyCorsHeaders = (req: any, res: any) => {
   // 读取浏览器发起请求时的来源。
   const requestOrigin = String(req.headers.origin || '')
@@ -555,7 +569,7 @@ const dispatchRequest = async (req: any, res: any) => {
   const requestUrl = String(req.url || '')
 
   // 截取不带查询参数的路径部分。
-  const requestPath = requestUrl.split('?')[0]
+  const requestPath = normalizeMountedRequestPath(requestUrl.split('?')[0])
 
   // 按注册顺序执行路由策略，保证原有优先级不变。
   for (const strategy of REQUEST_ROUTE_STRATEGIES) {

@@ -23,9 +23,31 @@ const readViteApiBaseUrl = () => {
   return String(viteEnv?.VITE_API_BASE_URL || '').trim()
 }
 
+const isBrowserOnLocalhost = () => {
+  if (typeof window === 'undefined') {
+    return false
+  }
+
+  return ['localhost', '127.0.0.1', '::1'].includes(window.location.hostname)
+}
+
+const normalizeApiBaseUrl = (value: string) => {
+  const normalized = value.replace(/\/+$/, '')
+
+  if (!normalized) {
+    return ''
+  }
+
+  if (!isBrowserOnLocalhost() && /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(normalized)) {
+    return ''
+  }
+
+  return normalized
+}
+
 // 统一的前端后端接口基址。
-export const API_BASE_URL = readRuntimeApiBaseUrl().replace(/\/+$/, '')
-  || readViteApiBaseUrl().replace(/\/+$/, '')
+export const API_BASE_URL = normalizeApiBaseUrl(readRuntimeApiBaseUrl())
+  || normalizeApiBaseUrl(readViteApiBaseUrl())
 
 // 将相对接口路径拼成可请求的完整地址。
 export const buildApiUrl = (path: string) => {
