@@ -297,15 +297,69 @@ onBeforeUnmount(() => {
 
 const resolveRedirect = () => String(route.query.redirect || '').trim()
 
+const normalizeInstallRedirect = (value: string) => {
+  const redirect = value.trim()
+  const basePath = import.meta.env.BASE_URL.replace(/\/+$/, '')
+
+  if (!redirect || redirect === route.fullPath) {
+    return '/'
+  }
+
+  if (basePath && (redirect === basePath || redirect === `${basePath}/`)) {
+    return '/'
+  }
+
+  if (basePath && redirect.startsWith(`${basePath}/`)) {
+    return redirect.slice(basePath.length) || '/'
+  }
+
+  return redirect
+}
+
+const readMountedSystemInitStatus = async () => {
+  if (typeof window === 'undefined') {
+    return null
+  }
+
+  const basePath = import.meta.env.BASE_URL.replace(/\/+$/, '')
+  const statusPath = `${basePath || ''}/api/system-init/status`
+  const response = await fetch(statusPath, {
+    method: 'GET',
+    credentials: 'include',
+    cache: 'no-store',
+  })
+
+  if (!response.ok) {
+    return null
+  }
+
+  return await response.json().catch(() => null) as { data?: { isInitialized?: boolean } } | null
+}
+
 const leaveInstallIfInitialized = async () => {
   if (!systemInitStore.isInitialized.value) {
     return
   }
 
-  await router.replace(resolveRedirect() || '/')
+  await router.replace(normalizeInstallRedirect(resolveRedirect()))
+}
+
+const forceLeaveInstallIfInitialized = async () => {
+  const status = await readMountedSystemInitStatus().catch(() => null)
+  if (status?.data?.isInitialized !== true) {
+    return false
+  }
+
+  const basePath = import.meta.env.BASE_URL || '/'
+  window.location.replace(basePath)
+  return true
 }
 
 onMounted(async () => {
+  if (await forceLeaveInstallIfInitialized()) {
+    return
+  }
+
   await systemInitStore.loadStatus(true)
   await leaveInstallIfInitialized()
 })
