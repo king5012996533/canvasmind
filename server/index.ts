@@ -232,6 +232,12 @@ const isFileExists = async (filePath: string) => {
 }
 
 // 处理静态资源与前端路由回退。
+const setHtmlNoCacheHeaders = (res: any) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate')
+  res.setHeader('Pragma', 'no-cache')
+  res.setHeader('Expires', '0')
+}
+
 const handleStaticRequest = async (req: any, res: any, requestPath: string) => {
   // 仅允许 GET 请求读取静态资源。
   if (req.method !== 'GET') {
@@ -264,6 +270,9 @@ const handleStaticRequest = async (req: any, res: any, requestPath: string) => {
       : fileBuffer
     res.statusCode = 200
     res.setHeader('Content-Type', contentType)
+    if (contentType.startsWith('text/html')) {
+      setHtmlNoCacheHeaders(res)
+    }
     res.end(responseBody)
     return true
   }
@@ -274,6 +283,7 @@ const handleStaticRequest = async (req: any, res: any, requestPath: string) => {
     const fileBuffer = await fs.readFile(indexFilePath)
     res.statusCode = 200
     res.setHeader('Content-Type', 'text/html; charset=utf-8')
+    setHtmlNoCacheHeaders(res)
     res.end(injectRuntimeClientConfig(fileBuffer.toString('utf8')))
     return true
   }
@@ -594,7 +604,25 @@ const dispatchRequest = async (req: any, res: any) => {
 }
 
 // 创建独立 Node 后端服务。
+const handleLegacyInstallRedirect = (req: any, res: any) => {
+  const rawUrl = String(req.url || '')
+  const [pathPart, queryPart = ''] = rawUrl.split('?')
+  if (pathPart !== '/install') {
+    return false
+  }
+
+  res.statusCode = 302
+  res.setHeader('Location', `/mind/install${queryPart ? `?${queryPart}` : ''}`)
+  res.setHeader('Cache-Control', 'no-store')
+  res.end()
+  return true
+}
+
 const server = createServer(async (req, res) => {
+  if (handleLegacyInstallRedirect(req, res)) {
+    return
+  }
+
   // 先写入统一跨域头，保证前端跨域可访问。
   applyCorsHeaders(req, res)
 
