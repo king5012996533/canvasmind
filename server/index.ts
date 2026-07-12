@@ -27,6 +27,7 @@ import { isSystemConfigPath } from './system-config/constants'
 import { handleSystemConfigRequest } from './system-config/request-handler'
 import { isSystemInitPath } from './system-init/constants'
 import { handleSystemInitRequest } from './system-init/request-handler'
+import { getSystemInitStatus } from './system-init/service'
 import { isWorkflowDefinitionsPath } from './workflow-definitions/constants'
 import { handleWorkflowDefinitionsRequest } from './workflow-definitions/request-handler'
 import { isGenerationRecordsPath } from './generation-records/constants'
@@ -604,22 +605,30 @@ const dispatchRequest = async (req: any, res: any) => {
 }
 
 // 创建独立 Node 后端服务。
-const handleLegacyInstallRedirect = (req: any, res: any) => {
+const handleLegacyInstallRedirect = async (req: any, res: any) => {
   const rawUrl = String(req.url || '')
   const [pathPart, queryPart = ''] = rawUrl.split('?')
-  if (pathPart !== '/install') {
+  if (pathPart !== '/install' && pathPart !== '/mind/install') {
     return false
   }
 
+  let initialized = false
+  try {
+    initialized = (await getSystemInitStatus()).isInitialized
+  } catch {
+    initialized = false
+  }
+
+  const targetPath = initialized ? '/mind/' : '/mind/install'
   res.statusCode = 302
-  res.setHeader('Location', `/mind/install${queryPart ? `?${queryPart}` : ''}`)
+  res.setHeader('Location', `${targetPath}${!initialized && queryPart ? `?${queryPart}` : ''}`)
   res.setHeader('Cache-Control', 'no-store')
   res.end()
   return true
 }
 
 const server = createServer(async (req, res) => {
-  if (handleLegacyInstallRedirect(req, res)) {
+  if (await handleLegacyInstallRedirect(req, res)) {
     return
   }
 
