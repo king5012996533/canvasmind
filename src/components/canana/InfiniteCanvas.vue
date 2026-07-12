@@ -30,49 +30,8 @@ const containerRef = ref(null)
 
 const images = ref([])
 
-// 模拟数据
-const mockImages = [
-  { id: 1, src: 'https://picsum.photos/seed/a1/1728/2304', w: 1728, h: 2304 },
-  { id: 2, src: 'https://picsum.photos/seed/a2/1728/2304', w: 1728, h: 2304 },
-  { id: 3, src: 'https://picsum.photos/seed/a3/1728/2304', w: 1728, h: 2304 },
-  { id: 4, src: 'https://picsum.photos/seed/a4/1728/2304', w: 1728, h: 2304 },
-  { id: 5, src: 'https://picsum.photos/seed/a5/1728/2304', w: 1728, h: 2304 },
-  { id: 6, src: 'https://picsum.photos/seed/a6/1728/2304', w: 1728, h: 2304 },
-  { id: 7, src: 'https://picsum.photos/seed/a7/1728/2304', w: 1728, h: 2304 },
-  { id: 8, src: 'https://picsum.photos/seed/a8/1728/2304', w: 1728, h: 2304 },
-  { id: 9, src: 'https://picsum.photos/seed/a9/1728/2304', w: 1728, h: 2304 },
-  { id: 10, src: 'https://picsum.photos/seed/a10/1728/2304', w: 1728, h: 2304 },
-  { id: 11, src: 'https://picsum.photos/seed/a11/1728/2304', w: 1728, h: 2304 },
-  { id: 12, src: 'https://picsum.photos/seed/a12/1728/2304', w: 1728, h: 2304 },
-]
-
-let mockIndex = 0
-let generating = false
-
-// 模拟生成图片（逐个添加）
 async function generateImages() {
-  if (generating || mockIndex >= mockImages.length) return
-  generating = true
-
-  // 每次生成 4 张
-  const count = Math.min(4, mockImages.length - mockIndex)
-
-  for (let i = 0; i < count; i++) {
-    await new Promise(r => setTimeout(r, 300 + Math.random() * 200))
-    const img = mockImages[mockIndex]
-    images.value.push({ ...img, index: mockIndex })
-    mockIndex++
-  }
-
-  // 生成后居中显示
-  setTimeout(() => {
-    if (containerRef.value) {
-      const rect = containerRef.value.getBoundingClientRect()
-      viewport.centerContent(gridLayout.frameWidth.value, gridLayout.frameHeight.value, rect)
-    }
-  }, 100)
-
-  generating = false
+  return false
 }
 
 // 添加外部图片（从资产选择器选择的图片）
@@ -694,7 +653,7 @@ function getDisplayIndex(img) {
             @mousedown.stop="handleImageDragStart($event, img)"
           >
             <img :src="img.src"  loading="lazy" draggable="false" />
-            <div class="ai-tag">AI生成</div>
+            <div class="ai-tag">素材</div>
           </div>
         </div>
       </div>

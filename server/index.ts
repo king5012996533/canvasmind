@@ -85,13 +85,18 @@ const readStaticDistDir = () => {
 // 读取允许跨域的来源配置。
 const readAllowedOrigins = () => {
   // 读取逗号分隔的来源字符串。
-  const rawOrigins = String(process.env.CORS_ALLOWED_ORIGINS || '')
+  const configuredOrigins = process.env.CORS_ALLOWED_ORIGINS
+  const rawOrigins = String(configuredOrigins || '')
     .split(',')
     .map(item => item.trim())
     .filter(Boolean)
 
   // 优先使用环境变量，否则使用本地开发默认值。
-  return rawOrigins.length ? rawOrigins : DEFAULT_CORS_ALLOWED_ORIGINS
+  if (configuredOrigins !== undefined) {
+    return rawOrigins
+  }
+
+  return process.env.NODE_ENV === 'production' ? [] : DEFAULT_CORS_ALLOWED_ORIGINS
 }
 
 // 读取前端运行时公开配置。
@@ -284,10 +289,13 @@ const applyCorsHeaders = (req: any, res: any) => {
   const allowedOrigins = readAllowedOrigins()
 
   // 判断当前来源是否在白名单中。
-  const allowOrigin = allowedOrigins.includes(requestOrigin) ? requestOrigin : allowedOrigins[0]
+  const allowOrigin = requestOrigin && allowedOrigins.includes(requestOrigin) ? requestOrigin : ''
 
   // 写入允许的来源。
-  res.setHeader('Access-Control-Allow-Origin', allowOrigin)
+  if (allowOrigin) {
+    res.setHeader('Access-Control-Allow-Origin', allowOrigin)
+    res.setHeader('Access-Control-Allow-Credentials', 'true')
+  }
 
   // 声明允许携带的请求方法。
   res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS')
@@ -318,8 +326,6 @@ const applyCorsHeaders = (req: any, res: any) => {
   res.setHeader('Access-Control-Allow-Headers', Array.from(allowHeaderSet).join(','))
 
   // 允许跨域请求携带 Cookie。
-  res.setHeader('Access-Control-Allow-Credentials', 'true')
-
   // 告诉代理和浏览器当前响应会随 Origin 变化。
   res.setHeader('Vary', 'Origin')
 }

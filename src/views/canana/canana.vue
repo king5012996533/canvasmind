@@ -1,5 +1,6 @@
 <script setup>
 import { ref } from 'vue'
+import { ElMessage } from 'element-plus'
 import Header from '@components/canana/Header.vue'
 import LeftToolbar from '@components/canana/LeftToolbar.vue'
 import InfiniteCanvas from '@components/canana/InfiniteCanvas.vue'
@@ -29,13 +30,12 @@ const handleSelectionChange = (image) => {
 
 // 处理本地上传
 const handleUpload = () => {
-  // TODO: 实现上传逻辑
-  console.log('本地上传')
+  ElMessage.info('创意画布上传正在接入中，请先在资产库或工作流中上传素材。')
 }
 
 // 处理选择资产
 const handleSelectAsset = () => {
-  console.log('选择资产')
+  ElMessage.info('创意画布资产选择正在接入真实资产库。')
 }
 
 // 处理资产选择完成 - 渲染到画布
@@ -61,16 +61,7 @@ const pendingMessage = ref('')
 const handlePromptSend = (message, type) => {
   pendingMessage.value = message
   rightPanelOpen.value = true
-  // 创建画布并生成图片
-  if (!canvasCreated.value) {
-    canvasCreated.value = true
-    // 等待画布渲染后再生成
-    setTimeout(() => {
-      canvasRef.value?.generateImages()
-    }, 100)
-  } else {
-    canvasRef.value?.generateImages()
-  }
+  ElMessage.info('创意画布 AI 生成正在接入中，请先使用工作流画布完成真实生成。')
 }
 </script>
 

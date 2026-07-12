@@ -12,11 +12,13 @@ const defaultStatus = (): SystemInitStatus => ({
 const systemInitStatus = ref<SystemInitStatus>(defaultStatus())
 const systemInitLoading = ref(false)
 const systemInitInitialized = ref(false)
+const systemInitLoadError = ref('')
 let loadSystemInitPromise: Promise<SystemInitStatus> | null = null
 
 const applySystemInitStatus = (status?: SystemInitStatus | null) => {
   systemInitStatus.value = status || defaultStatus()
   systemInitInitialized.value = true
+  systemInitLoadError.value = ''
   return systemInitStatus.value
 }
 
@@ -32,7 +34,11 @@ export const useSystemInitStore = () => {
     systemInitLoading.value = true
     loadSystemInitPromise = getSystemInitStatus()
       .then(result => applySystemInitStatus(result || defaultStatus()))
-      .catch(() => applySystemInitStatus(defaultStatus()))
+      .catch((error) => {
+        systemInitInitialized.value = true
+        systemInitLoadError.value = error?.message || '无法连接后端服务，请检查部署域名、接口地址或 CORS 配置。'
+        return systemInitStatus.value
+      })
       .finally(() => {
         systemInitLoading.value = false
         loadSystemInitPromise = null
@@ -57,6 +63,7 @@ export const useSystemInitStore = () => {
     systemInitStatus,
     systemInitLoading,
     systemInitInitialized,
+    systemInitLoadError,
     isInitialized,
     loadStatus,
     runInitialize,

@@ -21,6 +21,23 @@ const inputMessage = ref('')
 const messagesContainer = ref(null)
 const toggleCollapse = (msg) => { msg.collapsed = !msg.collapsed }
 
+const scrollMessagesToBottom = () => {
+  nextTick(() => {
+    if (messagesContainer.value) {
+      messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight
+    }
+  })
+}
+
+const pushUnavailableResponse = () => {
+  messages.value.push({
+    id: Date.now(),
+    type: 'ai-text',
+    content: '创意画布的 AI 对话和生图能力正在接入真实后端。当前不会返回随机占位图；请先使用工作流画布完成真实图片/视频生成。',
+  })
+  scrollMessagesToBottom()
+}
+
 // 图片上传
 const uploadedImages = ref([])
 const fileInputRef = ref(null)
@@ -106,27 +123,7 @@ const sendMessage = () => {
     }
   })
 
-  // 模拟AI回复（2秒后）
-  setTimeout(() => {
-    messages.value.push({
-      id: Date.now(),
-      type: 'ai-images',
-      summary: (content || '图片生成').slice(0, 10) + '...',
-      collapsed: false,
-      images: [
-        `https://picsum.photos/200/267?random=${Date.now()}`,
-        `https://picsum.photos/200/267?random=${Date.now() + 1}`,
-        `https://picsum.photos/200/267?random=${Date.now() + 2}`,
-        `https://picsum.photos/200/267?random=${Date.now() + 3}`,
-      ],
-      totalCount: 4
-    })
-    nextTick(() => {
-      if (messagesContainer.value) {
-        messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight
-      }
-    })
-  }, 2000)
+  pushUnavailableResponse()
 }
 
 // 处理 ContentGenerator 发送事件
@@ -188,27 +185,7 @@ watch(() => props.initialMessage, (newMessage) => {
       }
     })
 
-    // 模拟AI回复
-    setTimeout(() => {
-      messages.value.push({
-        id: Date.now(),
-        type: 'ai-images',
-        summary: newMessage.slice(0, 10) + '...',
-        collapsed: false,
-        images: [
-          `https://picsum.photos/200/267?random=${Date.now()}`,
-          `https://picsum.photos/200/267?random=${Date.now() + 1}`,
-          `https://picsum.photos/200/267?random=${Date.now() + 2}`,
-          `https://picsum.photos/200/267?random=${Date.now() + 3}`,
-        ],
-        totalCount: 4
-      })
-      nextTick(() => {
-        if (messagesContainer.value) {
-          messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight
-        }
-      })
-    }, 2000)
+    pushUnavailableResponse()
   }
 })
 
@@ -274,6 +251,12 @@ const contentGeneratorHeight = computed(() => hasMessages.value ? 102 : 102)
           <!-- 用户消息（右对齐） -->
           <div v-if="msg.type === 'user'" class="message-row user-MkS7tH">
             <div class="user-bubble">{{ msg.content }}</div>
+          </div>
+
+          <div v-else-if="msg.type === 'ai-text'" class="message-row ai">
+            <div class="ai-block ai-text-block">
+              {{ msg.content }}
+            </div>
           </div>
 
           <!-- AI 图片回复 -->
@@ -472,6 +455,13 @@ const contentGeneratorHeight = computed(() => hasMessages.value ? 102 : 102)
 .agent-user-reference-card__action:hover {
   color: #aeb4c3;
   transform: translateY(-1px);
+}
+
+.ai-text-block {
+  color: var(--text-secondary);
+  font-size: 14px;
+  line-height: 1.7;
+  padding: 16px 18px;
 }
 
 /* 图片预览弹窗 */

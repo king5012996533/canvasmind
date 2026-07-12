@@ -268,6 +268,10 @@ router.beforeEach(async (to) => {
     await systemInitStore.loadStatus()
   }
 
+  if (systemInitStore.systemInitLoadError.value && to.path !== '/install') {
+    return true
+  }
+
   if (!systemInitStore.isInitialized.value && to.path !== '/install') {
     return {
       path: '/install',

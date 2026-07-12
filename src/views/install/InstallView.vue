@@ -35,6 +35,13 @@
       </div>
 
       <div
+        v-if="systemInitStore.systemInitLoadError.value"
+        class="mx-4 mb-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 md:mx-6"
+      >
+        后端连接失败：{{ systemInitStore.systemInitLoadError.value }}
+      </div>
+
+      <div
         v-if="step === 0"
         class="flex h-full flex-1 items-center justify-center px-4 py-6 md:px-6 md:py-10"
       >
@@ -160,7 +167,7 @@
 <script setup lang="ts">
 import { ArrowRight, Check } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
-import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { buildAssetUrl } from '@/api/http'
 import { uploadStorageFile } from '@/api/storage'
@@ -289,6 +296,26 @@ onBeforeUnmount(() => {
 })
 
 const resolveRedirect = () => String(route.query.redirect || '').trim()
+
+const leaveInstallIfInitialized = async () => {
+  if (!systemInitStore.isInitialized.value) {
+    return
+  }
+
+  await router.replace(resolveRedirect() || '/')
+}
+
+onMounted(async () => {
+  await systemInitStore.loadStatus(true)
+  await leaveInstallIfInitialized()
+})
+
+watch(
+  () => systemInitStore.isInitialized.value,
+  () => {
+    void leaveInstallIfInitialized()
+  },
+)
 
 const handleAdminFieldUpdate = (field: keyof InstallAdminFormModel, value: string) => {
   adminForm[field] = value

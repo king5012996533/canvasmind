@@ -308,11 +308,7 @@ export const resolveGenerationPointCost = async (input: {
   const category = String(input.endpointType || '').trim().toUpperCase()
 
   if (!providerId || !modelKey || (category !== 'CHAT' && category !== 'IMAGE' && category !== 'VIDEO')) {
-    return {
-      pointCost: 0,
-      modelId: '',
-      modelName: '',
-    }
+    throw new Error('生成计费参数缺失，请检查供应商、模型和任务类型配置。')
   }
 
   const model = await prisma.aiModel.findFirst({
@@ -331,11 +327,7 @@ export const resolveGenerationPointCost = async (input: {
   })
 
   if (!model) {
-    return {
-      pointCost: 0,
-      modelId: '',
-      modelName: '',
-    }
+    throw new Error(`未找到可用模型计费配置：${providerId}/${modelKey}/${category}`)
   }
 
   // 计费类型判断：per_second（视频按秒）或 flat（图片/对话固定积分）

@@ -30,33 +30,7 @@ const loadAssets = async () => {
   assetsLoading.value = true
   // 模拟 API 请求
   setTimeout(() => {
-    // 示例数据，实际使用时替换为 API 调用
-    mockAssets.value = [
-      {
-        id: '1',
-        url: 'https://p26-dreamina-sign.byteimg.com/tos-cn-i-tb4s082cfz/003c91f7f32947c6874aaab9d79778cb~tplv-tb4s082cfz-aigc_resize_mark:640:640.jpeg?lk3s=43402efa&x-expires=1769425200&x-signature=zaZPRco%2BPmSEZK3jJDy6tg9rM%2BA%3D&format=.jpeg',
-        type: 'image',
-        name: '示例图片1'
-      },
-      {
-        id: '2',
-        url: 'https://p26-dreamina-sign.byteimg.com/tos-cn-i-tb4s082cfz/003c91f7f32947c6874aaab9d79778cb~tplv-tb4s082cfz-aigc_resize_mark:640:640.jpeg?lk3s=43402efa&x-expires=1769425200&x-signature=zaZPRco%2BPmSEZK3jJDy6tg9rM%2BA%3D&format=.jpeg',
-        type: 'image',
-        name: '示例图片2'
-      },
-      {
-        id: '3',
-        url: 'https://p26-dreamina-sign.byteimg.com/tos-cn-i-tb4s082cfz/003c91f7f32947c6874aaab9d79778cb~tplv-tb4s082cfz-aigc_resize_mark:640:640.jpeg?lk3s=43402efa&x-expires=1769425200&x-signature=zaZPRco%2BPmSEZK3jJDy6tg9rM%2BA%3D&format=.jpeg',
-        type: 'image',
-        name: '示例图片3'
-      },
-      {
-        id: '4',
-        url: 'https://p26-dreamina-sign.byteimg.com/tos-cn-i-tb4s082cfz/003c91f7f32947c6874aaab9d79778cb~tplv-tb4s082cfz-aigc_resize_mark:640:640.jpeg?lk3s=43402efa&x-expires=1769425200&x-signature=zaZPRco%2BPmSEZK3jJDy6tg9rM%2BA%3D&format=.jpeg',
-        type: 'image',
-        name: '示例图片4'
-      }
-    ]
+    mockAssets.value = []
     assetsLoading.value = false
   }, 500)
 }

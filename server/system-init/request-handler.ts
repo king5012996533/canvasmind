@@ -14,6 +14,12 @@ const readRequesterIp = (req: any) => {
   return String(req.socket?.remoteAddress || '').trim()
 }
 
+const setNoStoreHeaders = (res: any) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate')
+  res.setHeader('Pragma', 'no-cache')
+  res.setHeader('Expires', '0')
+}
+
 // 处理首次安装初始化请求。
 export const handleSystemInitRequest = async (req: any, res: any) => {
   try {
@@ -26,11 +32,13 @@ export const handleSystemInitRequest = async (req: any, res: any) => {
 
     if (req.method === 'GET' && requestPath === SYSTEM_INIT_STATUS_PATH) {
       const data = await getSystemInitStatus()
+      setNoStoreHeaders(res)
       sendJson(res, 200, { data })
       return
     }
 
     if (req.method === 'POST' && requestPath === SYSTEM_INIT_INITIALIZE_PATH) {
+      setNoStoreHeaders(res)
       const payload = await readSystemInitBody<SystemInitPayload>(req)
       const data = await initializeSystem({
         ...payload,
