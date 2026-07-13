@@ -54,6 +54,20 @@ const layoutModeClass = computed(() => (isTopMenuLayout.value ? 'top' : 'side'))
 </script>
 
 <style scoped>
+.frontstage-page-shell {
+  font-family:
+    "Founder Yashi Black",
+    Inter,
+    "PingFang SC",
+    "Hiragino Sans GB",
+    "Microsoft YaHei",
+    Arial,
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: geometricPrecision;
+}
+
 :deep(.content-TZbgMr) {
   overflow-x: hidden;
 }
