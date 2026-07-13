@@ -51,7 +51,7 @@
 }
 
 body,html {
-    --font-family: CapCut Sans,PingFang SC,Hiragino Sans GB,Microsoft YaHei,Arial,sans-serif;
+    --font-family: "Founder Yashi Black",CapCut Sans,PingFang SC,Hiragino Sans GB,Microsoft YaHei,Arial,sans-serif;
     --alphanumeric-font-family: Montserrat,var(--font-family);
     font-family: var(--font-family)!important;
     margin: 0;
@@ -1417,7 +1417,7 @@ body,html {
         }
 
         body,html {
-            --font-family: CapCut Sans,PingFang SC,Hiragino Sans GB,Microsoft YaHei,Arial,sans-serif;
+            --font-family: "Founder Yashi Black",CapCut Sans,PingFang SC,Hiragino Sans GB,Microsoft YaHei,Arial,sans-serif;
             --alphanumeric-font-family: Montserrat,var(--font-family);
             --canvas-float-backdrop-blur: 32px
         }
@@ -4448,7 +4448,7 @@ body,html {
         }
 
         body,html {
-            --font-family: CapCut Sans,PingFang SC,Hiragino Sans GB,Microsoft YaHei,Arial,sans-serif;
+            --font-family: "Founder Yashi Black",CapCut Sans,PingFang SC,Hiragino Sans GB,Microsoft YaHei,Arial,sans-serif;
             --alphanumeric-font-family: Montserrat,var(--font-family);
             font-family: var(--font-family)!important;
             margin: 0;
