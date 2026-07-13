@@ -1,7 +1,3 @@
-@layer theme, utilities;
-@import "tailwindcss/theme.css" layer(theme);
-@import "tailwindcss/utilities.css" layer(utilities);
-
 @font-face {
     font-display: swap;
     font-family: Montserrat;
@@ -44,6 +40,10 @@
     font-weight: 600;
     src: url(//lf3-lv-buz.vlabstatic.com/obj/image-lvweb-buz/common/font/FZYASHJW-Demibold.20251015.subset.ttf)
 }
+
+@layer theme, utilities;
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/utilities.css" layer(utilities);
 
 :export {
     modal-z-index: 1001;
