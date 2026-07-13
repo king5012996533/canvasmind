@@ -2828,8 +2828,14 @@ const startImageGenerationTask = async (record: GeneratingRecord) => {
     })
 
     const modelConfig = getModelByName(record.modelKey || requestModelKey) as ImageModel | null
+    const normalizedRatio = String(record.ratio || '').replace(':', 'x')
     const size = modelConfig?.sizes?.length
-        ? (modelConfig.sizes.find((sizeItem: string) => sizeItem.includes(record.ratio.replace(':', 'x'))) || modelConfig.defaultParams?.size || '')
+        ? (
+          modelConfig.sizes.find((sizeItem: string) => sizeItem === record.ratio)
+          || modelConfig.sizes.find((sizeItem: string) => sizeItem.includes(normalizedRatio))
+          || modelConfig.defaultParams?.size
+          || ''
+        )
         : (record.ratio ? record.ratio.replace(':', 'x') : '')
     const hasReferenceImages = Array.isArray(record.referenceImages) && record.referenceImages.length > 0
     // 单次 n 上限来自 capabilityJson.maxImagesPerRequest（后台可配置；不同上游限制不一致：
@@ -2849,6 +2855,9 @@ const startImageGenerationTask = async (record: GeneratingRecord) => {
     }
     if (size) {
       data.size = size
+    }
+    if (record.resolution) {
+      data.quality = record.resolution
     }
     if (!hasReferenceImages) {
       data = appendImageReferencesToRequestBody(data, record.referenceImages)

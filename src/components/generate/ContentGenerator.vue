@@ -73,14 +73,19 @@ interface GeneratorDraftPayload {
 interface ExposedImageToolbarInstance {
   currentModelVersion: string
   currentSize: string
+  currentQuality?: string
   currentCount: number
 }
 
 interface ExposedVideoToolbarInstance {
   currentModelVersion: string
   currentSize: string
+  currentResolution?: string
   currentDuration: string
   currentFeature: string
+  getCurrentBillingMode?: () => 'text_to_video' | 'uploaded_video'
+  getCurrentSizeConfig?: () => { value: string; quality: string }
+  getCurrentModelLabel?: () => string
 }
 
 interface ExposedAgentToolbarInstance {
@@ -309,19 +314,19 @@ const handleSubmit = () => {
       model: toolbar?.currentModelLabel || '',
       modelKey: toolbar?.currentModelVersion || '',
       ratio: toolbar?.currentSize || '',
-      resolution: sizeConfig?.quality || '',
+      resolution: toolbar?.currentQuality || sizeConfig?.quality || '',
       referenceImages: [...imageReferenceImages.value],
       count: toolbar?.currentCount || 1,
     }
     emit('send', message, currentType.value, sendOptions)
   } else if (currentType.value === 'video' && videoToolbarRef.value) {
     const toolbar = videoToolbarRef.value
-    const sizeConfig = toolbar.getCurrentSizeConfig()
+    const sizeConfig = toolbar.getCurrentSizeConfig?.()
     emit('send', message, currentType.value, {
-      model: toolbar.getCurrentModelLabel(),
+      model: toolbar.getCurrentModelLabel?.() || '',
       modelKey: toolbar.currentModelVersion,
       ratio: toolbar.currentSize,
-      resolution: sizeConfig.quality,
+      resolution: toolbar.currentResolution || sizeConfig?.quality || '',
       duration: toolbar.currentDuration,
       feature: toolbar.currentFeature
     })
@@ -383,6 +388,9 @@ const applyDraft = async (payload: GeneratorDraftPayload) => {
       if (payload.ratio) {
         toolbar.currentSize = payload.ratio
       }
+      if (payload.resolution && toolbar.currentQuality !== undefined) {
+        toolbar.currentQuality = payload.resolution
+      }
     }
     return
   }
@@ -395,6 +403,9 @@ const applyDraft = async (payload: GeneratorDraftPayload) => {
       }
       if (payload.ratio) {
         toolbar.currentSize = payload.ratio
+      }
+      if (payload.resolution && toolbar.currentResolution !== undefined) {
+        toolbar.currentResolution = payload.resolution
       }
       if (payload.duration) {
         toolbar.currentDuration = payload.duration
@@ -484,7 +495,19 @@ const readCurrentModelPointCost = () => {
   if (!currentModelKey) return 0
 
   const model = getModelByName(currentModelKey) as { defaultParams?: Record<string, any> } | null
-  return Math.max(0, Number(model?.defaultParams?.billingRule?.power || 0))
+  const billingRule = model?.defaultParams?.billingRule || {}
+
+  if (currentType.value === 'video') {
+    const toolbar = videoToolbarRef.value as ExposedVideoToolbarInstance | null
+    const resolution = toolbar?.currentResolution || toolbar?.getCurrentSizeConfig?.()?.quality || ''
+    const mode = toolbar?.getCurrentBillingMode?.() || (toolbar?.currentFeature === 'text-to-video' ? 'text_to_video' : 'uploaded_video')
+    const matrixPrice = Number(billingRule?.pricingMatrix?.[resolution]?.[mode] || 0)
+    if (Number.isFinite(matrixPrice) && matrixPrice > 0) {
+      return matrixPrice
+    }
+  }
+
+  return Math.max(0, Number(billingRule?.power || 0))
 }
 
 const readCurrentModelBillingRule = () => {

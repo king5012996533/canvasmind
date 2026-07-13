@@ -5,7 +5,7 @@
 
 import { ref, computed, watch, onMounted } from 'vue'
 import SelectPopup from '../common/SelectPopup.vue'
-import { getAllVideoModels, getDefaultVideoModelKey, loadPublicModelCatalog } from '@/config/models'
+import { getAllVideoModels, getDefaultVideoModelKey, getModelByName, loadPublicModelCatalog } from '@/config/models'
 
 // 弹出方向类型
 type Placement = 'top' | 'bottom' | 'auto'
@@ -38,10 +38,17 @@ const featureOptions = [
 ]
 
 // 尺寸配置
-const sizeOptions = [
-  { value: '16:9', label: '16:9', quality: '720P' },
-  { value: '9:16', label: '9:16', quality: '720P' },
-  { value: '1:1', label: '1:1', quality: '720P' }
+const ratioOptions = [
+  { value: '16:9', label: '16:9' },
+  { value: '9:16', label: '9:16' },
+  { value: '1:1', label: '1:1' }
+]
+
+const resolutionOptions = [
+  { value: '480P', label: '480P' },
+  { value: '720P', label: '720P' },
+  { value: '1080P', label: '1080P' },
+  { value: '4K', label: '4K' }
 ]
 
 // 时长配置
@@ -66,7 +73,8 @@ const readStoredVideoToolbarState = () => {
 const storedVideoToolbarState = readStoredVideoToolbarState()
 const validVideoModelValues = modelVersions.value.map(item => item.value)
 const validVideoFeatureValues = featureOptions.map(item => item.value)
-const validVideoSizeValues = sizeOptions.map(item => item.value)
+const validVideoSizeValues = ratioOptions.map(item => item.value)
+const validVideoResolutionValues = resolutionOptions.map(item => item.value)
 const validVideoDurationValues = durationOptions.map(item => item.value)
 
 // 当前选中状态
@@ -79,8 +87,37 @@ const currentFeature = ref(
 const currentSize = ref(
   validVideoSizeValues.includes(storedVideoToolbarState?.size) ? storedVideoToolbarState.size : '16:9',
 )
+const currentResolution = ref(
+  validVideoResolutionValues.includes(storedVideoToolbarState?.resolution) ? storedVideoToolbarState.resolution : '720P',
+)
 const currentDuration = ref(
   validVideoDurationValues.includes(storedVideoToolbarState?.duration) ? storedVideoToolbarState.duration : '5s',
+)
+
+const getCurrentBillingMode = () =>
+  currentFeature.value === 'text-to-video' ? 'text_to_video' : 'uploaded_video'
+
+const supportedResolutionOptions = computed(() => {
+  const model = getModelByName(currentModelVersion.value) as { defaultParams?: Record<string, any> } | null
+  const matrix = model?.defaultParams?.billingRule?.pricingMatrix
+  if (!matrix || typeof matrix !== 'object') {
+    return resolutionOptions
+  }
+
+  const mode = getCurrentBillingMode()
+  const filtered = resolutionOptions.filter(option => Number(matrix?.[option.value]?.[mode] || 0) > 0)
+  return filtered.length ? filtered : resolutionOptions
+})
+
+const sizeOptions = computed(() =>
+  ratioOptions.flatMap(ratio =>
+    supportedResolutionOptions.value.map(resolution => ({
+      key: `${ratio.value}:${resolution.value}`,
+      value: ratio.value,
+      label: ratio.label,
+      quality: resolution.value,
+    })),
+  ),
 )
 
 watch(
@@ -90,6 +127,17 @@ watch(
     if (!values.length) return
     if (!values.includes(currentModelVersion.value)) {
       currentModelVersion.value = getDefaultVideoModelKey() || values[0]
+    }
+  },
+  { immediate: true },
+)
+
+watch(
+  [supportedResolutionOptions, currentFeature, currentModelVersion],
+  () => {
+    const values = supportedResolutionOptions.value.map(item => item.value)
+    if (values.length && !values.includes(currentResolution.value)) {
+      currentResolution.value = values[0]
     }
   },
   { immediate: true },
@@ -165,7 +213,13 @@ const selectFeature = (feature: string) => {
 
 // 选择尺寸
 const selectSize = (size: string) => {
-  currentSize.value = size
+  const [ratio, resolution] = String(size || '').split(':')
+  if (validVideoSizeValues.includes(ratio)) {
+    currentSize.value = ratio
+  }
+  if (validVideoResolutionValues.includes(resolution)) {
+    currentResolution.value = resolution
+  }
   isSizeSelectOpen.value = false
 }
 
@@ -185,23 +239,25 @@ const getCurrentFeatureLabel = () => {
 }
 
 watch(
-  [currentModelVersion, currentFeature, currentSize, currentDuration],
-  ([model, feature, size, duration]) => {
+  [currentModelVersion, currentFeature, currentSize, currentResolution, currentDuration],
+  ([model, feature, size, resolution, duration]) => {
     if (typeof window === 'undefined') return
-    window.localStorage.setItem(VIDEO_TOOLBAR_STORAGE_KEY, JSON.stringify({ model, feature, size, duration }))
+    window.localStorage.setItem(VIDEO_TOOLBAR_STORAGE_KEY, JSON.stringify({ model, feature, size, resolution, duration }))
   },
   { immediate: true },
 )
 
 const getCurrentSizeConfig = () => {
-  return sizeOptions.find(s => s.value === currentSize.value) || sizeOptions[0]
+  return sizeOptions.value.find(s => s.value === currentSize.value && s.quality === currentResolution.value) || sizeOptions.value[0]
 }
 
 defineExpose({
   currentModelVersion,
   currentSize,
+  currentResolution,
   currentDuration,
   currentFeature,
+  getCurrentBillingMode,
   getCurrentModelLabel,
   getCurrentSizeConfig
 })
@@ -369,15 +425,15 @@ defineExpose({
     <SelectPopup v-model:visible="isSizeSelectOpen" :trigger-ref="sizeTriggerRef" :placement="placement" title="视频尺寸">
       <ul class="lv-select-popup-inner">
         <li v-for="size in sizeOptions"
-            :key="size.value"
-            :class="['lv-select-option', { 'lv-select-option-wrapper-selected': currentSize === size.value }]"
-            @click.stop="selectSize(size.value)">
+            :key="size.key"
+            :class="['lv-select-option', { 'lv-select-option-wrapper-selected': currentSize === size.value && currentResolution === size.quality }]"
+            @click.stop="selectSize(size.key)">
           <div class="select-option-label">
             <div class="select-option-label-content">
               <span>{{ size.label }}</span>
               <span class="commercial-content-QAReHq">{{ size.quality }}</span>
             </div>
-            <span v-if="currentSize === size.value" class="select-option-check-icon">
+            <span v-if="currentSize === size.value && currentResolution === size.quality" class="select-option-check-icon">
               <svg width="1em" height="1em" viewBox="0 0 24 24"
                    preserveAspectRatio="xMidYMid meet" fill="none"
                    role="presentation" xmlns="http://www.w3.org/2000/svg">

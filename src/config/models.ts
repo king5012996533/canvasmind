@@ -178,17 +178,66 @@ const emptyCatalog: PublicModelCatalogResult = {
 const modelCatalogRef = ref<PublicModelCatalogResult>(emptyCatalog)
 let modelCatalogPromise: Promise<PublicModelCatalogResult> | null = null
 
+const normalizeConfiguredOptions = (items: unknown): SizeOption[] => {
+  if (!Array.isArray(items)) return []
+  return items
+    .map((item) => {
+      if (typeof item === 'string') {
+        const value = item.trim()
+        return value ? { label: value, key: value } : null
+      }
+      if (item && typeof item === 'object') {
+        const record = item as Record<string, unknown>
+        const key = String(record.key || record.value || '').trim()
+        const label = String(record.label || record.name || key).trim()
+        return key ? { label: label || key, key } : null
+      }
+      return null
+    })
+    .filter((item): item is SizeOption => Boolean(item))
+}
+
+const normalizeConfiguredQualityOptions = (items: unknown): QualityOption[] => {
+  if (!Array.isArray(items)) return []
+  return items
+    .map((item) => {
+      if (typeof item === 'string') {
+        const value = item.trim()
+        return value ? { label: value, key: value } : null
+      }
+      if (item && typeof item === 'object') {
+        const record = item as Record<string, unknown>
+        const key = String(record.key || record.value || '').trim()
+        const label = String(record.label || record.name || key).trim()
+        return key ? { label: label || key, key } : null
+      }
+      return null
+    })
+    .filter((item): item is QualityOption => Boolean(item))
+}
+
 const toImageModel = (item: PublicModelCatalogItem): ImageModel => {
   const defaultParams = item.defaultParamsJson || {}
+  const capability = (item.capabilityJson || {}) as Record<string, unknown>
   const normalizedSize = String(defaultParams.size || '').trim().toLowerCase()
   const hasSeedreamSize = /\d+x\d+/.test(normalizedSize)
-  const sizes = hasSeedreamSize
-    ? SEEDREAM_SIZE_OPTIONS.map(option => option.key)
-    : BANANA_SIZE_OPTIONS.map(option => option.key)
+  const billingRule = (defaultParams.billingRule || {}) as Record<string, unknown>
+  const pricingMatrix = billingRule.pricingMatrix as Record<string, unknown> | undefined
+  const configuredSizes = normalizeConfiguredOptions(defaultParams.sizes || capability.sizes)
+  const configuredQualities = normalizeConfiguredQualityOptions(
+    defaultParams.qualities
+    || capability.qualities
+    || (pricingMatrix && typeof pricingMatrix === 'object' ? Object.keys(pricingMatrix) : []),
+  )
+  const configuredSizesByQuality = (defaultParams.sizesByQuality || capability.sizesByQuality) as Record<string, unknown> | undefined
+  const sizes = configuredSizes.length
+    ? configuredSizes.map(option => option.key)
+    : hasSeedreamSize
+      ? SEEDREAM_SIZE_OPTIONS.map(option => option.key)
+      : BANANA_SIZE_OPTIONS.map(option => option.key)
 
   // 单次出图最大张数：从 capabilityJson.maxImagesPerRequest 读取，未配置时缺省 1（最保守，
   // 防止跨上游误差直接打穿；管理员可在后台模型配置里覆写为对应上游的真实上限）。
-  const capability = (item.capabilityJson || {}) as Record<string, unknown>
   const rawMaxImages = Number(capability.maxImagesPerRequest)
   const maxImagesPerRequest = Number.isFinite(rawMaxImages) && rawMaxImages >= 1
     ? Math.floor(rawMaxImages)
@@ -209,10 +258,14 @@ const toImageModel = (item: PublicModelCatalogItem): ImageModel => {
     isDefault: item.isDefault,
     sizes,
     maxImagesPerRequest,
-    qualities: hasSeedreamSize ? SEEDREAM_QUALITY_OPTIONS : undefined,
-    getSizesByQuality: hasSeedreamSize
-      ? (quality: string) => quality === '4k' ? SEEDREAM_4K_SIZE_OPTIONS : SEEDREAM_SIZE_OPTIONS
-      : undefined,
+    qualities: configuredQualities.length ? configuredQualities : (hasSeedreamSize ? SEEDREAM_QUALITY_OPTIONS : undefined),
+    getSizesByQuality: configuredSizesByQuality && typeof configuredSizesByQuality === 'object'
+      ? (quality: string) => normalizeConfiguredOptions(configuredSizesByQuality[quality] || configuredSizes).length
+        ? normalizeConfiguredOptions(configuredSizesByQuality[quality] || configuredSizes)
+        : (hasSeedreamSize ? (quality === '4k' ? SEEDREAM_4K_SIZE_OPTIONS : SEEDREAM_SIZE_OPTIONS) : BANANA_SIZE_OPTIONS)
+      : hasSeedreamSize
+        ? (quality: string) => quality === '4k' ? SEEDREAM_4K_SIZE_OPTIONS : SEEDREAM_SIZE_OPTIONS
+        : undefined,
     tips: sizes.length ? undefined : '当前模型请在提示词中描述尺寸',
   }
 }

@@ -5,7 +5,14 @@
 
 import { ref, computed, watch, onMounted } from 'vue'
 import SelectPopup from '../common/SelectPopup.vue'
-import { getAllImageModels, getDefaultImageModelKey, loadPublicModelCatalog, type ImageModel } from '@/config/models'
+import {
+  BANANA_SIZE_OPTIONS,
+  getAllImageModels,
+  getDefaultImageModelKey,
+  loadPublicModelCatalog,
+  SEEDREAM_QUALITY_OPTIONS,
+  type ImageModel,
+} from '@/config/models'
 
 // 弹出方向类型
 type Placement = 'top' | 'bottom' | 'auto'
@@ -31,13 +38,15 @@ const modelVersions = computed(() =>
 )
 
 // 尺寸配置
-const sizeOptions = [
-  { value: '1:1', label: '1:1', quality: '高清 2K' },
-  { value: '4:3', label: '4:3', quality: '高清 2K' },
-  { value: '3:4', label: '3:4', quality: '高清 2K' },
-  { value: '16:9', label: '16:9', quality: '高清 2K' },
-  { value: '9:16', label: '9:16', quality: '高清 2K' }
-]
+const DEFAULT_IMAGE_QUALITY = 'standard'
+const IMAGE_SIZE_QUALITY_SEPARATOR = '__quality__'
+
+const resolveQualityLabel = (quality: string) => {
+  if (quality === '4k') return '4K'
+  if (quality === '2k') return '2K'
+  if (quality === '1k') return '1K'
+  return SEEDREAM_QUALITY_OPTIONS.find(item => item.key === quality)?.label || ''
+}
 
 const readStoredImageToolbarState = () => {
   if (typeof window === 'undefined') {
@@ -53,7 +62,6 @@ const readStoredImageToolbarState = () => {
 
 const storedToolbarState = readStoredImageToolbarState()
 const validImageModelValues = modelVersions.value.map(item => item.value)
-const validImageSizeValues = sizeOptions.map(item => item.value)
 
 const IMAGE_COUNT_MIN = 1
 // 当模型未配置 maxImagesPerRequest 时使用的最保守上限：1。
@@ -66,9 +74,42 @@ const currentModelVersion = ref(
   validImageModelValues.includes(storedToolbarState?.model) ? storedToolbarState.model : getDefaultImageModelKey(),
 )
 
+const currentQuality = ref(
+  String(storedToolbarState?.quality || DEFAULT_IMAGE_QUALITY).trim() || DEFAULT_IMAGE_QUALITY,
+)
+
+const currentImageModel = computed(() => {
+  const all = getAllImageModels() as ImageModel[]
+  return all.find(item => item.key === currentModelVersion.value) || null
+})
+
+const qualityOptions = computed(() => {
+  const options = currentImageModel.value?.qualities
+  return Array.isArray(options) && options.length ? options : [{ label: '', key: DEFAULT_IMAGE_QUALITY }]
+})
+
+const sizeOptions = computed(() => {
+  const model = currentImageModel.value
+  return qualityOptions.value.flatMap(quality => {
+    const qualityKey = quality.key
+    const rawOptions = model?.getSizesByQuality?.(qualityKey)
+      || (model?.sizes?.length
+        ? model.sizes.map(key => ({ key, label: key }))
+        : BANANA_SIZE_OPTIONS)
+
+    return rawOptions.map(option => ({
+      key: `${encodeURIComponent(option.key)}${IMAGE_SIZE_QUALITY_SEPARATOR}${encodeURIComponent(qualityKey)}`,
+      value: option.key,
+      label: option.label,
+      quality: qualityKey,
+      qualityLabel: resolveQualityLabel(qualityKey),
+    }))
+  })
+})
+
 // 当前选中的尺寸
 const currentSize = ref(
-  validImageSizeValues.includes(storedToolbarState?.size) ? storedToolbarState.size : '1:1',
+  String(storedToolbarState?.size || '').trim() || '1x1',
 )
 
 // 当前生成数量：用户每次打开都从 1 开始，不记忆历史值
@@ -132,7 +173,15 @@ const selectModelVersion = (version: string) => {
 
 // 选择尺寸
 const selectSize = (size: string) => {
-  currentSize.value = size
+  const [encodedSize, encodedQuality] = String(size || '').split(IMAGE_SIZE_QUALITY_SEPARATOR)
+  const nextSize = encodedSize ? decodeURIComponent(encodedSize) : ''
+  const nextQuality = encodedQuality ? decodeURIComponent(encodedQuality) : ''
+  if (nextSize) {
+    currentSize.value = nextSize
+  }
+  if (nextQuality) {
+    currentQuality.value = nextQuality
+  }
   isSizeSelectOpen.value = false
 }
 
@@ -144,7 +193,7 @@ const currentModelLabel = computed(() => {
 
 // 获取当前尺寸配置
 const currentSizeConfig = () => {
-  return sizeOptions.find(s => s.value === currentSize.value) || sizeOptions[0]
+  return sizeOptions.value.find(s => s.value === currentSize.value && s.quality === currentQuality.value) || sizeOptions.value[0]
 }
 
 watch(
@@ -154,6 +203,18 @@ watch(
     if (!values.length) return
     if (!values.includes(currentModelVersion.value)) {
       currentModelVersion.value = getDefaultImageModelKey() || values[0]
+    }
+  },
+  { immediate: true },
+)
+
+watch(
+  [sizeOptions, currentModelVersion],
+  () => {
+    const matched = sizeOptions.value.find(s => s.value === currentSize.value && s.quality === currentQuality.value)
+    if (!matched && sizeOptions.value[0]) {
+      currentSize.value = sizeOptions.value[0].value
+      currentQuality.value = sizeOptions.value[0].quality
     }
   },
   { immediate: true },
@@ -171,10 +232,10 @@ onMounted(() => {
 })
 
 watch(
-  [currentModelVersion, currentSize],
-  ([model, size]) => {
+  [currentModelVersion, currentSize, currentQuality],
+  ([model, size, quality]) => {
     if (typeof window === 'undefined') return
-    window.localStorage.setItem(IMAGE_TOOLBAR_STORAGE_KEY, JSON.stringify({ model, size }))
+    window.localStorage.setItem(IMAGE_TOOLBAR_STORAGE_KEY, JSON.stringify({ model, size, quality }))
   },
   { immediate: true },
 )
@@ -183,6 +244,7 @@ defineExpose({
   currentModelVersion,
   currentModelLabel,
   currentSize,
+  currentQuality,
   currentSizeConfig,
   currentCount,
 })
@@ -262,7 +324,7 @@ defineExpose({
     <button ref="sizeTriggerRef"
             :class="['lv-btn', 'lv-btn-secondary', 'lv-btn-size-default', 'lv-btn-shape-square', 'button-lc3WzE', 'toolbar-button-FhFnQ_', 'toolbar-button-pEFNv9', { 'lv-btn-icon-only': iconOnly }]"
             type="button"
-            :title="iconOnly ? currentSizeConfig().value + ' ' + currentSizeConfig().quality : undefined"
+            :title="iconOnly ? currentSizeConfig().value + ' ' + currentSizeConfig().qualityLabel : undefined"
             @click.stop="toggleSizeSelect">
       <svg fill="none" height="1em" preserveAspectRatio="xMidYMid meet"
            role="presentation" viewBox="0 0 24 24"
@@ -274,22 +336,22 @@ defineExpose({
                 fill-rule="evenodd"></path>
         </g>
       </svg>
-      <span v-if="!iconOnly" class="button-text-lDBpQJ">{{ currentSizeConfig().value }}<span class="divider-KQsVxi"></span><span class="commercial-content-PR23Ed">{{ currentSizeConfig().quality }}</span></span>
+      <span v-if="!iconOnly" class="button-text-lDBpQJ">{{ currentSizeConfig().label || currentSizeConfig().value }}<span class="divider-KQsVxi"></span><span class="commercial-content-PR23Ed">{{ currentSizeConfig().qualityLabel }}</span></span>
     </button>
 
     <!-- 尺寸选择弹窗 -->
     <SelectPopup v-model:visible="isSizeSelectOpen" :trigger-ref="sizeTriggerRef" :placement="placement" title="图片尺寸">
       <ul class="lv-select-popup-inner">
         <li v-for="size in sizeOptions"
-            :key="size.value"
-            :class="['lv-select-option', { 'lv-select-option-wrapper-selected': currentSize === size.value }]"
-            @click.stop="selectSize(size.value)">
+            :key="size.key"
+            :class="['lv-select-option', { 'lv-select-option-wrapper-selected': currentSize === size.value && currentQuality === size.quality }]"
+            @click.stop="selectSize(size.key)">
           <div class="select-option-label">
             <div class="select-option-label-content">
               <span>{{ size.label }}</span>
-              <span class="commercial-content-PR23Ed">{{ size.quality }}</span>
+              <span class="commercial-content-PR23Ed">{{ size.qualityLabel }}</span>
             </div>
-            <span v-if="currentSize === size.value" class="select-option-check-icon">
+            <span v-if="currentSize === size.value && currentQuality === size.quality" class="select-option-check-icon">
               <svg width="1em" height="1em" viewBox="0 0 24 24"
                    preserveAspectRatio="xMidYMid meet" fill="none"
                    role="presentation" xmlns="http://www.w3.org/2000/svg">
