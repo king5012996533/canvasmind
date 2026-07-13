@@ -17,8 +17,8 @@ const DEFAULT_SESSION_EXPIRE_DAYS = 30
 // 会话 Cookie 名称。
 export const AUTH_SESSION_COOKIE_NAME = 'canana_session'
 
-const AUTH_METHOD_LIST_CACHE_KEY = redisKeys.cache('auth-method', 'list:all')
-const AUTH_METHOD_ENABLED_LIST_CACHE_KEY = redisKeys.cache('auth-method', 'list:enabled')
+const AUTH_METHOD_LIST_CACHE_KEY = redisKeys.cache('auth-method', 'list:all:v2')
+const AUTH_METHOD_ENABLED_LIST_CACHE_KEY = redisKeys.cache('auth-method', 'list:enabled:v2')
 const buildAuthMethodDetailCacheKey = (methodType: AuthMethodType) => redisKeys.cache('auth-method', `detail:${methodType}`)
 
 // 默认登录方式配置。
@@ -264,13 +264,20 @@ const findDefaultAuthMethodConfig = (methodType: AuthMethodType) => {
 
 // 确保默认登录方式配置存在。
 export const ensureDefaultAuthMethodConfigs = async () => {
-  const existingCount = await prisma.authMethodConfig.count()
-  if (existingCount > 0) {
+  const existingRows = await prisma.authMethodConfig.findMany({
+    select: {
+      methodType: true,
+    },
+  })
+  const existingMethodTypes = new Set(existingRows.map(item => item.methodType))
+  const missingDefaultMethods = DEFAULT_AUTH_METHOD_CONFIGS.filter(item => !existingMethodTypes.has(item.methodType))
+
+  if (!missingDefaultMethods.length) {
     return
   }
 
   await prisma.authMethodConfig.createMany({
-    data: DEFAULT_AUTH_METHOD_CONFIGS.map(item => ({
+    data: missingDefaultMethods.map(item => ({
       methodType: item.methodType,
       category: item.category,
       displayName: item.displayName,
@@ -285,6 +292,8 @@ export const ensureDefaultAuthMethodConfigs = async () => {
       configJson: item.config || {},
     })),
   })
+
+  await invalidateAuthMethodCaches(missingDefaultMethods.map(item => item.methodType))
 }
 
 // 确保指定登录方式配置存在。
