@@ -77,9 +77,6 @@ const routes: RouteRecordRaw[] = [
     path: '/workflow',
     name: 'Workflow',
     component: Workflow,
-    meta: {
-      grayScale: true,
-    },
   },
   {
     path: '/agentic-assets-canvas',
