@@ -1,5 +1,5 @@
 <template>
-  <div class="relative box-border flex h-screen w-full items-center justify-center bg-[var(--bg-body)] p-0 md:p-5" style="font-family: 'Founder Yashi Black', 'CapCut Sans', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', Arial, sans-serif;">
+  <div class="relative box-border flex h-screen w-full items-center justify-center bg-[var(--bg-body)] p-0 md:p-5">
     <div
       :class="[
         'relative box-border flex flex-col overflow-hidden bg-[var(--bg-surface)] transition-[width,height] duration-500 md:rounded-xl',
