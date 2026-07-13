@@ -51,6 +51,9 @@ const routes: RouteRecordRaw[] = [
     path: '/canvas',
     name: 'Canvas',
     component: Canana,
+    meta: {
+      grayScale: true,
+    },
   },
   {
     path: '/account',
@@ -74,6 +77,9 @@ const routes: RouteRecordRaw[] = [
     path: '/workflow',
     name: 'Workflow',
     component: Workflow,
+    meta: {
+      grayScale: true,
+    },
   },
   {
     path: '/agentic-assets-canvas',
@@ -284,6 +290,15 @@ router.beforeEach(async (to) => {
   if (systemInitStore.isInitialized.value && to.path === '/install') {
     return {
       path: '/',
+    }
+  }
+
+  if (to.meta?.grayScale) {
+    return {
+      path: '/',
+      query: {
+        grayScale: '1',
+      },
     }
   }
 

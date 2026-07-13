@@ -65,6 +65,15 @@ onMounted(() => {
   }
 })
 
+watch(
+  () => route.query.grayScale,
+  (value) => {
+    if (value === '1') {
+      ElMessage.info('该功能正在灰度测试中，即将上线，敬请期待')
+    }
+  },
+)
+
 const handleTabChange = (index) => {
   console.log('Tab changed to:', index)
 }
