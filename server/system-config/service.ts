@@ -82,7 +82,7 @@ const DEFAULT_HOME_BANNER_ITEMS = [
 
 const createDefaultSystemConfig = () => ({
   siteInfo: {
-    siteName: 'Canana',
+    siteName: 'CananaMind',
     siteDescription: '',
     siteLogoUrl: '',
     siteIconUrl: '',

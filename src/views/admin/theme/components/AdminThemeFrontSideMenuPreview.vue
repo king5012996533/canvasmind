@@ -536,7 +536,7 @@ const emit = defineEmits<{
 }>()
 
 const resolvedSiteLogoUrl = computed(() => String(props.siteInfo.siteLogoUrl || '').trim())
-const resolvedSiteName = computed(() => String(props.siteInfo.siteName || 'Canana').trim() || 'Canana')
+const resolvedSiteName = computed(() => String(props.siteInfo.siteName || 'CananaMind').trim() || 'CananaMind')
 const showTopMenu = computed(() => props.settings.showTopMenu)
 const showCenterMenu = computed(() => props.settings.showCenterMenu)
 const showBottomMenu = computed(() => props.settings.showBottomMenu)
@@ -649,7 +649,7 @@ const buildTopShellClass = (item: SystemHomeSideMenuItemConfig) => ({
 
 const previewSystemSettings = computed(() => ({
   siteInfo: {
-    siteName: props.siteInfo.siteName || 'Canana',
+    siteName: props.siteInfo.siteName || 'CananaMind',
     siteDescription: props.siteInfo.siteDescription || '',
     siteLogoUrl: props.siteInfo.siteLogoUrl || '',
     siteIconUrl: props.siteInfo.siteIconUrl || '',

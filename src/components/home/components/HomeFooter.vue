@@ -23,7 +23,7 @@ import { useSystemSettingsStore } from '@/stores/system-settings'
 const systemSettingsStore = useSystemSettingsStore()
 const siteInfo = computed(() => systemSettingsStore.publicSystemSettings.value.siteInfo)
 const policy = computed(() => systemSettingsStore.publicSystemSettings.value.policySettings)
-const siteName = computed(() => siteInfo.value.siteName || 'Canana')
+const siteName = computed(() => siteInfo.value.siteName || 'CananaMind')
 const siteDescription = computed(() => siteInfo.value.siteDescription || '')
 </script>
 

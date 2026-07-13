@@ -243,7 +243,7 @@ const {
 
 const createDefaultSystemForm = (): SystemConfigPayload => ({
   siteInfo: {
-    siteName: 'Canana',
+    siteName: 'CananaMind',
     siteDescription: '',
     siteLogoUrl: '',
     siteIconUrl: '',

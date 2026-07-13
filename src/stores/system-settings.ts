@@ -12,7 +12,7 @@ import { useThemePreferenceStore } from '@/stores/theme-preference'
 
 const createDefaultSettings = (): SystemConfigPayload => ({
   siteInfo: {
-    siteName: 'Canana',
+    siteName: 'CananaMind',
     siteDescription: '',
     siteLogoUrl: '',
     siteIconUrl: '',
@@ -58,6 +58,22 @@ const createDefaultSettings = (): SystemConfigPayload => ({
   homeLayoutSettings: createDefaultHomeLayoutSettings(),
 })
 
+const normalizeSiteName = (siteName?: string | null) => {
+  const normalized = String(siteName || '').trim()
+  if (!normalized || normalized === 'Canana' || normalized === 'CanvasMind') {
+    return 'CananaMind'
+  }
+  return normalized
+}
+
+const normalizeSystemSettings = (settings: SystemConfigPayload): SystemConfigPayload => ({
+  ...settings,
+  siteInfo: {
+    ...settings.siteInfo,
+    siteName: normalizeSiteName(settings.siteInfo.siteName),
+  },
+})
+
 const publicSystemSettings = ref<SystemConfigPayload>(createDefaultSettings())
 const settingsLoading = ref(false)
 let loadSettingsPromise: Promise<SystemConfigPayload> | null = null
@@ -101,7 +117,7 @@ const syncThemeRuntime = (settings: SystemConfigPayload) => {
 }
 
 const applyPublicSystemSettings = (settings?: SystemConfigPayload | null) => {
-  publicSystemSettings.value = settings || createDefaultSettings()
+  publicSystemSettings.value = normalizeSystemSettings(settings || createDefaultSettings())
   syncSiteRuntime(publicSystemSettings.value)
   syncThemeRuntime(publicSystemSettings.value)
   return publicSystemSettings.value

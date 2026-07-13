@@ -104,8 +104,8 @@ const resolvedSiteName = computed(() => {
   return String(
     props.systemSettingsOverride?.siteInfo.siteName
     || publicSystemSettings.value.siteInfo.siteName
-    || 'Canana',
-  ).trim() || 'Canana'
+    || 'CananaMind',
+  ).trim() || 'CananaMind'
 })
 
 const handleTopItemClick = (item?: { actionType?: string; actionValue?: string }) => {

@@ -127,7 +127,7 @@ const loginButtonText = authStore.loginButtonText
 const currentPath = computed(() => route.path)
 
 const resolvedSiteLogoUrl = computed(() => String(publicSystemSettings.value.siteInfo.siteLogoUrl || '').trim())
-const resolvedSiteName = computed(() => String(publicSystemSettings.value.siteInfo.siteName || 'Canana').trim() || 'Canana')
+const resolvedSiteName = computed(() => String(publicSystemSettings.value.siteInfo.siteName || 'CananaMind').trim() || 'CananaMind')
 const resolvedAvatarSrc = computed(() => {
   return authStore.currentUser.value?.avatarUrl
     || "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200' viewBox='0 0 200 200'%3E%3Crect width='200' height='200' rx='100' fill='%23E5E7EB'/%3E%3Ccircle cx='100' cy='76' r='30' fill='%239CA3AF'/%3E%3Cpath d='M52 154c8-24 28-38 48-38s40 14 48 38' fill='%239CA3AF'/%3E%3C/svg%3E"
