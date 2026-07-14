@@ -11,6 +11,7 @@ import { getAllVideoModels, getDefaultVideoModelKey, getModelByName, loadPublicM
 type Placement = 'top' | 'bottom' | 'auto'
 
 const VIDEO_TOOLBAR_STORAGE_KEY = 'canana:generator:video-toolbar'
+const VIDEO_SIZE_RESOLUTION_SEPARATOR = '__resolution__'
 
 // Props 定义
 interface Props {
@@ -38,7 +39,7 @@ const featureOptions = [
 ]
 
 // 尺寸配置
-const ratioOptions = [
+const defaultRatioOptions = [
   { value: '16:9', label: '16:9' },
   { value: '9:16', label: '9:16' },
   { value: '1:1', label: '1:1' }
@@ -52,7 +53,7 @@ const resolutionOptions = [
 ]
 
 // 时长配置
-const durationOptions = [
+const defaultDurationOptions = [
   { value: '5s', label: '5s' },
   { value: '10s', label: '10s' },
   { value: '15s', label: '15s' },
@@ -73,9 +74,7 @@ const readStoredVideoToolbarState = () => {
 const storedVideoToolbarState = readStoredVideoToolbarState()
 const validVideoModelValues = modelVersions.value.map(item => item.value)
 const validVideoFeatureValues = featureOptions.map(item => item.value)
-const validVideoSizeValues = ratioOptions.map(item => item.value)
 const validVideoResolutionValues = resolutionOptions.map(item => item.value)
-const validVideoDurationValues = durationOptions.map(item => item.value)
 
 // 当前选中状态
 const currentModelVersion = ref(
@@ -85,14 +84,41 @@ const currentFeature = ref(
   validVideoFeatureValues.includes(storedVideoToolbarState?.feature) ? storedVideoToolbarState.feature : 'first-last-frame',
 )
 const currentSize = ref(
-  validVideoSizeValues.includes(storedVideoToolbarState?.size) ? storedVideoToolbarState.size : '16:9',
+  String(storedVideoToolbarState?.size || '16:9').trim() || '16:9',
 )
 const currentResolution = ref(
   validVideoResolutionValues.includes(storedVideoToolbarState?.resolution) ? storedVideoToolbarState.resolution : '720P',
 )
 const currentDuration = ref(
-  validVideoDurationValues.includes(storedVideoToolbarState?.duration) ? storedVideoToolbarState.duration : '5s',
+  String(storedVideoToolbarState?.duration || '5s').trim() || '5s',
 )
+
+const currentVideoModel = computed(() => getAllVideoModels().find((item: any) => item.key === currentModelVersion.value) || null)
+
+const normalizeRatioValue = (value: string) => String(value || '').trim().replace(/x/i, ':')
+
+const ratioOptions = computed(() => {
+  const ratios = Array.isArray(currentVideoModel.value?.ratios) ? currentVideoModel.value?.ratios || [] : []
+  const mapped = ratios
+    .map((ratio: string) => {
+      const value = normalizeRatioValue(ratio)
+      return value ? { value, label: value } : null
+    })
+    .filter((item): item is { value: string; label: string } => Boolean(item))
+  return mapped.length ? mapped : defaultRatioOptions
+})
+
+const durationOptions = computed(() => {
+  const durs = Array.isArray(currentVideoModel.value?.durs) ? currentVideoModel.value?.durs || [] : []
+  const mapped = durs
+    .map((duration: any) => {
+      const seconds = Number(duration?.key || duration?.value || 0)
+      if (!Number.isFinite(seconds) || seconds <= 0) return null
+      return { value: `${seconds}s`, label: String(duration?.label || `${seconds}s`) }
+    })
+    .filter((item): item is { value: string; label: string } => Boolean(item))
+  return mapped.length ? mapped : defaultDurationOptions
+})
 
 const getCurrentBillingMode = () =>
   currentFeature.value === 'text-to-video' ? 'text_to_video' : 'uploaded_video'
@@ -110,9 +136,9 @@ const supportedResolutionOptions = computed(() => {
 })
 
 const sizeOptions = computed(() =>
-  ratioOptions.flatMap(ratio =>
+  ratioOptions.value.flatMap(ratio =>
     supportedResolutionOptions.value.map(resolution => ({
-      key: `${ratio.value}:${resolution.value}`,
+      key: `${encodeURIComponent(ratio.value)}${VIDEO_SIZE_RESOLUTION_SEPARATOR}${encodeURIComponent(resolution.value)}`,
       value: ratio.value,
       label: ratio.label,
       quality: resolution.value,
@@ -138,6 +164,22 @@ watch(
     const values = supportedResolutionOptions.value.map(item => item.value)
     if (values.length && !values.includes(currentResolution.value)) {
       currentResolution.value = values[0]
+    }
+  },
+  { immediate: true },
+)
+
+watch(
+  [ratioOptions, durationOptions, currentModelVersion],
+  () => {
+    const ratioValues = ratioOptions.value.map(item => item.value)
+    if (ratioValues.length && !ratioValues.includes(currentSize.value)) {
+      currentSize.value = ratioValues[0]
+    }
+
+    const durationValues = durationOptions.value.map(item => item.value)
+    if (durationValues.length && !durationValues.includes(currentDuration.value)) {
+      currentDuration.value = durationValues[0]
     }
   },
   { immediate: true },
@@ -213,8 +255,10 @@ const selectFeature = (feature: string) => {
 
 // 选择尺寸
 const selectSize = (size: string) => {
-  const [ratio, resolution] = String(size || '').split(':')
-  if (validVideoSizeValues.includes(ratio)) {
+  const [encodedRatio, encodedResolution] = String(size || '').split(VIDEO_SIZE_RESOLUTION_SEPARATOR)
+  const ratio = encodedRatio ? decodeURIComponent(encodedRatio) : ''
+  const resolution = encodedResolution ? decodeURIComponent(encodedResolution) : ''
+  if (ratioOptions.value.some(item => item.value === ratio)) {
     currentSize.value = ratio
   }
   if (validVideoResolutionValues.includes(resolution)) {

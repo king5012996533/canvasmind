@@ -216,6 +216,28 @@ const normalizeConfiguredQualityOptions = (items: unknown): QualityOption[] => {
     .filter((item): item is QualityOption => Boolean(item))
 }
 
+const normalizeConfiguredDurationOptions = (items: unknown): DurationOption[] => {
+  if (!Array.isArray(items)) return []
+  return items
+    .map((item) => {
+      if (typeof item === 'number') {
+        return Number.isFinite(item) && item > 0 ? { label: `${item} 秒`, key: item } : null
+      }
+      if (typeof item === 'string') {
+        const value = Number(item.trim())
+        return Number.isFinite(value) && value > 0 ? { label: `${value} 秒`, key: value } : null
+      }
+      if (item && typeof item === 'object') {
+        const record = item as Record<string, unknown>
+        const key = Number(record.key || record.value || 0)
+        const label = String(record.label || `${key} 秒`).trim()
+        return Number.isFinite(key) && key > 0 ? { label: label || `${key} 秒`, key } : null
+      }
+      return null
+    })
+    .filter((item): item is DurationOption => Boolean(item))
+}
+
 const toImageModel = (item: PublicModelCatalogItem): ImageModel => {
   const defaultParams = item.defaultParamsJson || {}
   const capability = (item.capabilityJson || {}) as Record<string, unknown>
@@ -270,22 +292,29 @@ const toImageModel = (item: PublicModelCatalogItem): ImageModel => {
   }
 }
 
-const toVideoModel = (item: PublicModelCatalogItem): VideoModel => ({
-  id: item.id,
-  key: item.selectionKey,
-  label: item.label,
-  modelKey: item.modelKey,
-  providerId: item.providerId,
-  providerCode: item.providerCode,
-  providerName: item.providerName,
-  description: item.description,
-  capabilityJson: item.capabilityJson,
-  defaultParams: item.defaultParamsJson || {},
-  sortOrder: item.sortOrder,
-  isDefault: item.isDefault,
-  ratios: VIDEO_RATIO_LIST.map(option => option.key),
-  durs: VIDEO_DURATION_OPTIONS,
-})
+const toVideoModel = (item: PublicModelCatalogItem): VideoModel => {
+  const defaultParams = item.defaultParamsJson || {}
+  const capability = (item.capabilityJson || {}) as Record<string, unknown>
+  const configuredRatios = normalizeConfiguredOptions(defaultParams.ratios || capability.ratios)
+  const configuredDurations = normalizeConfiguredDurationOptions(defaultParams.durations || capability.durations || defaultParams.durs || capability.durs)
+
+  return {
+    id: item.id,
+    key: item.selectionKey,
+    label: item.label,
+    modelKey: item.modelKey,
+    providerId: item.providerId,
+    providerCode: item.providerCode,
+    providerName: item.providerName,
+    description: item.description,
+    capabilityJson: item.capabilityJson,
+    defaultParams,
+    sortOrder: item.sortOrder,
+    isDefault: item.isDefault,
+    ratios: configuredRatios.length ? configuredRatios.map(option => option.key) : VIDEO_RATIO_LIST.map(option => option.key),
+    durs: configuredDurations.length ? configuredDurations : VIDEO_DURATION_OPTIONS,
+  }
+}
 
 const toChatModel = (item: PublicModelCatalogItem): ChatModel => ({
   id: item.id,

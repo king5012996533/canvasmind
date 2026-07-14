@@ -562,6 +562,14 @@
 
           <div class="admin-form__field admin-form__field--full">
             <label class="admin-form__label" for="model-default-params">默认参数 JSON</label>
+            <div class="admin-form__inline-actions">
+              <button v-if="modelForm.category === 'IMAGE'" class="admin-button admin-button--secondary admin-button--small" type="button" @click="applyImageParameterTemplate">
+                写入图片规格模板
+              </button>
+              <button v-if="modelForm.category === 'VIDEO'" class="admin-button admin-button--secondary admin-button--small" type="button" @click="applyVideoParameterTemplate">
+                写入视频规格模板
+              </button>
+            </div>
             <textarea id="model-default-params" v-model="modelForm.defaultParamsJsonText" class="admin-textarea" placeholder='例如 {"temperature": 0.7}'></textarea>
             <div class="admin-form__hint">透传到上游的兜底参数；与「能力配置」字段冲突时，能力配置优先</div>
           </div>
@@ -753,6 +761,82 @@ const setPricingMatrixValue = (res: string, field: 'text_to_video' | 'uploaded_v
   }
   const target = event.target as HTMLInputElement
   modelForm.pricingMatrix[res][field] = Number(target.value) || 0
+}
+
+const readCurrentDefaultParamsDraft = () => {
+  return parseOptionalJson(modelForm.defaultParamsJsonText, '默认参数 JSON') || {}
+}
+
+const applyImageParameterTemplate = () => {
+  const current = readCurrentDefaultParamsDraft()
+  modelForm.defaultParamsJsonText = stringifyJson({
+    ...current,
+    size: current.size || '1x1',
+    quality: current.quality || '2k',
+    sizes: current.sizes || [
+      { label: '1:1', key: '1x1' },
+      { label: '3:4', key: '3x4' },
+      { label: '4:3', key: '4x3' },
+      { label: '9:16', key: '9x16' },
+      { label: '16:9', key: '16x9' },
+    ],
+    qualities: current.qualities || [
+      { label: '1K', key: '1k' },
+      { label: '2K', key: '2k' },
+      { label: '4K', key: '4k' },
+    ],
+    sizesByQuality: current.sizesByQuality || {
+      '1k': [
+        { label: '1:1', key: '1x1' },
+        { label: '3:4', key: '3x4' },
+        { label: '4:3', key: '4x3' },
+        { label: '9:16', key: '9x16' },
+        { label: '16:9', key: '16x9' },
+      ],
+      '2k': [
+        { label: '1:1', key: '1x1' },
+        { label: '3:4', key: '3x4' },
+        { label: '4:3', key: '4x3' },
+        { label: '9:16', key: '9x16' },
+        { label: '16:9', key: '16x9' },
+      ],
+      '4k': [
+        { label: '1:1', key: '1x1' },
+        { label: '3:4', key: '3x4' },
+        { label: '4:3', key: '4x3' },
+        { label: '9:16', key: '9x16' },
+        { label: '16:9', key: '16x9' },
+      ],
+    },
+  })
+}
+
+const applyVideoParameterTemplate = () => {
+  const current = readCurrentDefaultParamsDraft()
+  modelForm.defaultParamsJsonText = stringifyJson({
+    ...current,
+    ratio: current.ratio || '16x9',
+    resolution: current.resolution || '720P',
+    duration: current.duration || 5,
+    ratios: current.ratios || [
+      { label: '21:9', key: '21x9' },
+      { label: '16:9', key: '16x9' },
+      { label: '4:3', key: '4x3' },
+      { label: '1:1', key: '1x1' },
+      { label: '3:4', key: '3x4' },
+      { label: '9:16', key: '9x16' },
+    ],
+    durations: current.durations || [
+      { label: '4 秒', key: 4 },
+      { label: '5 秒', key: 5 },
+      { label: '6 秒', key: 6 },
+      { label: '7 秒', key: 7 },
+      { label: '8 秒', key: 8 },
+      { label: '9 秒', key: 9 },
+      { label: '10 秒', key: 10 },
+      { label: '15 秒', key: 15 },
+    ],
+  })
 }
 
 const discoverBatchSettings = reactive({
@@ -1680,5 +1764,18 @@ onBeforeUnmount(() => {
 
 .admin-model-tab-panel {
   margin-bottom: 8px;
+}
+
+.admin-form__inline-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 8px 0;
+}
+
+.admin-button--small {
+  min-height: 30px;
+  padding: 0 10px;
+  font-size: 12px;
 }
 </style>
